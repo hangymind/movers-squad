@@ -36,6 +36,23 @@ class AuthTest extends TestCase
             ->assertJsonMissingPath('data.password');
         $this->assertAuthenticated();
         $this->assertDatabaseHas('users', ['florr_id' => 'florr-player-001']);
+        $this->assertFalse(User::where('florr_id', 'florr-player-001')->firstOrFail()->is_admin);
+    }
+
+    public function test_first_registration_of_reserved_florr_id_becomes_admin(): void
+    {
+        $this->postJson('/api/register', [
+            'florrId' => 'Xyiw46_',
+            'password' => 'admin-password',
+            'password_confirmation' => 'admin-password',
+        ])->assertCreated()->assertJsonPath('data.isAdmin', true);
+
+        $this->assertDatabaseHas('users', ['florr_id' => 'Xyiw46_', 'is_admin' => true]);
+        $this->postJson('/api/register', [
+            'florrId' => 'Xyiw46_',
+            'password' => 'another-password',
+            'password_confirmation' => 'another-password',
+        ])->assertUnprocessable()->assertJsonValidationErrors('florrId');
     }
 
     public function test_registration_validates_unique_florr_id_and_password_confirmation(): void

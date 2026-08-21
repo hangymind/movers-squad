@@ -33,8 +33,6 @@ DB_PASSWORD=数据库密码
 SESSION_DOMAIN=你的域名
 SESSION_SECURE_COOKIE=true
 SANCTUM_STATEFUL_DOMAINS=你的域名
-ADMIN_FLORR_ID=Xyiw46_
-ADMIN_PASSWORD=在服务器填写管理员初始密码
 REVERB_SCHEME=https
 REVERB_HOST=你的域名
 REVERB_PORT=443
@@ -133,4 +131,6 @@ cp -a dist/. ../backend/public/
 supervisorctl restart movers-reverb
 ```
 
-`npm run build` 会关闭 source map 并使用 OXC 压缩、重命名局部标识符。浏览器端代码无法做到真正保密，混淆只能提高阅读成本；管理员密码、数据库密码和 Reverb Secret 必须只放在服务器 `.env`，不要提交到 Git。
+首次注册 Florr ID 为 `Xyiw46_`（大小写必须完全一致）的玩家会自动成为管理员，密码由该玩家在注册时设置。由于 Florr ID 唯一，之后无法重复注册该管理员 ID。
+
+`npm run build` 会关闭 source map 并使用 OXC 压缩、重命名局部标识符。浏览器端代码无法做到真正保密，混淆只能提高阅读成本；数据库密码和 Reverb Secret 必须只放在服务器 `.env`，不要提交到 Git。

