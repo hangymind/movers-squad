@@ -6,6 +6,7 @@ use App\Http\Resources\UserResource;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Str;
 
 class AdminUserController extends Controller
@@ -43,5 +44,12 @@ class AdminUserController extends Controller
         $data = $request->validate(['password' => ['required', 'string', 'min:8', 'max:72']]);
         $user->update(['password' => $data['password']]);
         return new UserResource($user->refresh());
+    }
+
+    public function destroy(Request $request, User $user): JsonResponse
+    {
+        abort_if($request->user()->is($user), 422, '不能删除当前管理员账号。');
+        $user->delete();
+        return response()->json(null, 204);
     }
 }

@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\User;
+use App\Models\Team;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
 use Tests\TestCase;
@@ -33,5 +34,22 @@ class AdminUserTest extends TestCase
     public function test_non_admin_cannot_access_admin_users(): void
     {
         $this->actingAs(User::factory()->create())->getJson('/api/admin/users')->assertForbidden();
+    }
+
+    public function test_admin_can_delete_an_account_and_related_team_but_not_self(): void
+    {
+        $admin = User::factory()->create(['is_admin' => true]);
+        $user = User::factory()->create(['florr_id' => 'delete-me']);
+        $team = Team::create(['game_name' => 'Florr.io', 'owner_id' => $user->id]);
+        $team->members()->attach($user, ['joined_at' => now()]);
+
+        $this->actingAs($admin)->deleteJson("/api/admin/users/{$user->id}")->assertNoContent();
+        $this->assertDatabaseMissing('users', ['id' => $user->id]);
+        $this->assertDatabaseMissing('teams', ['id' => $team->id]);
+        $this->assertDatabaseMissing('team_members', ['team_id' => $team->id]);
+
+        $this->actingAs($admin)->deleteJson("/api/admin/users/{$admin->id}")
+            ->assertUnprocessable();
+        $this->assertDatabaseHas('users', ['id' => $admin->id]);
     }
 }

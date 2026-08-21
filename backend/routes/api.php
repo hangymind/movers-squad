@@ -30,5 +30,6 @@ Route::middleware('auth:sanctum')->group(function (): void {
         Route::post('/users/{user}/ban', [AdminUserController::class, 'ban']);
         Route::post('/users/{user}/unban', [AdminUserController::class, 'unban']);
         Route::patch('/users/{user}/password', [AdminUserController::class, 'updatePassword']);
+        Route::delete('/users/{user}', [AdminUserController::class, 'destroy']);
     });
 });
