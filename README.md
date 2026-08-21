@@ -1,14 +1,15 @@
 # Movers Squad · Florr.io 组队招募
 
-一个面向 Florr.io 的前后端分离 4 人组队 MVP。前端使用 React + TypeScript，后端使用 Laravel 12 + PHP 8.3，数据存储在 MySQL，并通过 Laravel Reverb 向在线队员发送浏览器系统通知。
+一个面向 Florr.io 的前后端分离 4 人组队应用。前端使用 React + TypeScript，后端使用 Laravel 12 + PHP 8.3，生产环境使用 MySQL，并通过 Laravel Reverb 向在线队员发送浏览器系统通知。
 
 ## 功能
 
-- 用户名、Florr ID、密码注册登录，可选头像链接
+- 使用 Florr ID 和密码注册登录，头像在个人档案中管理
 - 发布游戏招募和备注，创建者自动成为队长
 - 每队最多 4 人，支持加入、成员退出、队长关闭招募
 - MySQL 事务与行锁防止并发超员
 - 私有 Reverb 频道和浏览器 Notification API
+- 管理员用户管理、Ban ID 搜索、封禁/解封和密码重置
 - 桌面端与移动端响应式界面
 
 ## 环境要求
@@ -72,6 +73,8 @@ npx playwright test
 PHPUnit 默认使用内存 SQLite 快速验证业务规则。上线前应在测试 MySQL 库执行测试和迁移，确认目标服务器的事务隔离与 `SELECT ... FOR UPDATE` 行为。
 
 ## 生产部署
+
+宝塔面板的完整首次部署、Nginx、Supervisor 和后续更新命令见 [`BAOTA_DEPLOY.md`](BAOTA_DEPLOY.md)。
 
 - 前端构建产物位于 `frontend/dist`，建议整站统一通过 `9191` 对外提供；将 `/api`、`/sanctum` 和 `/broadcasting` 转发到 Laravel，将 `/app` WebSocket 路径转发到 Reverb。
 - 站点必须启用 HTTPS，并将 `APP_URL`、`FRONTEND_URL`、`SANCTUM_STATEFUL_DOMAINS`、`SESSION_DOMAIN`、`REVERB_HOST`、`REVERB_PORT` 和 `REVERB_SCHEME` 设置为实际域名。

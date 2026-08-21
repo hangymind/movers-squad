@@ -10,6 +10,13 @@ export const api = axios.create({
   headers: { Accept: 'application/json' },
 })
 
+api.interceptors.response.use(undefined, (error: AxiosError<{ banId?: string }>) => {
+  if (error.response?.status === 403 && error.response.data?.banId && window.location.pathname !== '/banned') {
+    window.location.assign('/banned')
+  }
+  return Promise.reject(error)
+})
+
 export function getCsrfCookie() {
   return axios.get(`${apiOrigin}/sanctum/csrf-cookie`, { withCredentials: true })
 }

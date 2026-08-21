@@ -3,6 +3,10 @@ export interface User {
   florrId: string
   level?: number
   avatarUrl: string | null
+  isAdmin?: boolean
+  isBanned?: boolean
+  banId?: string | null
+  bannedAt?: string | null
 }
 
 export interface Team {

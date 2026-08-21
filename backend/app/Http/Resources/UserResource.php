@@ -14,6 +14,10 @@ class UserResource extends JsonResource
             'florrId' => $this->florr_id,
             'level' => $this->level,
             'avatarUrl' => $this->avatar_url,
+            'isAdmin' => (bool) $this->is_admin,
+            'isBanned' => $this->banned_at !== null,
+            'banId' => $this->ban_id,
+            'bannedAt' => $this->banned_at?->toISOString(),
         ];
     }
 }

@@ -27,6 +27,9 @@ class User extends Authenticatable
         'level',
         'avatar_url',
         'password',
+        'is_admin',
+        'banned_at',
+        'ban_id',
     ];
 
     /**
@@ -49,6 +52,8 @@ class User extends Authenticatable
         return [
             'password' => 'hashed',
             'level' => 'integer',
+            'is_admin' => 'boolean',
+            'banned_at' => 'datetime',
         ];
     }
 

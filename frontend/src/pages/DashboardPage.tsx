@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Bell, BellOff, ChevronDown, Gamepad2, LogOut, Plus, RefreshCw, ShieldCheck, UsersRound, UserCog } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
 import { Avatar } from '../components/Avatar'
 import { CreateTeamForm } from '../components/CreateTeamForm'
 import { TeamCard } from '../components/TeamCard'
@@ -14,6 +15,7 @@ interface DashboardPageProps { user: User; onUserUpdated: (user: User) => void; 
 type NotificationState = 'unsupported' | NotificationPermission
 
 export function DashboardPage({ user, onUserUpdated, onLogout }: DashboardPageProps) {
+  const navigate = useNavigate()
   const [teams, setTeams] = useState<Team[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -110,7 +112,7 @@ export function DashboardPage({ user, onUserUpdated, onLogout }: DashboardPagePr
             </button>
             <div className="user-menu-wrap">
               <button className="user-chip user-chip-button" type="button" onClick={() => setUserMenuOpen((open) => !open)} aria-expanded={userMenuOpen}><Avatar user={user} size="sm" /><span>{user.florrId}</span><ChevronDown size={15} /></button>
-              {userMenuOpen && <div className="user-menu"><button type="button" onClick={() => { setProfileOpen(true); setUserMenuOpen(false) }}><UserCog size={16} />档案设置</button><button type="button" onClick={() => void onLogout()}><LogOut size={16} />退出登录</button></div>}
+              {userMenuOpen && <div className="user-menu">{user.isAdmin && <button type="button" onClick={() => navigate('/admin')}><ShieldCheck size={16} />用户管理</button>}<button type="button" onClick={() => { setProfileOpen(true); setUserMenuOpen(false) }}><UserCog size={16} />档案设置</button><button type="button" onClick={() => void onLogout()}><LogOut size={16} />退出登录</button></div>}
             </div>
           </div>
         </div>
