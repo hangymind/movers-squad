@@ -1,0 +1,112 @@
+<?php
+
+namespace Tests\Feature;
+
+use App\Events\TeamMemberJoined;
+use App\Models\Team;
+use App\Models\User;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Event;
+use Tests\TestCase;
+
+class TeamFlowTest extends TestCase
+{
+    use RefreshDatabase;
+
+    public function test_authentication_is_required_for_team_endpoints(): void
+    {
+        $this->getJson('/api/teams')->assertUnauthorized();
+        $this->postJson('/api/teams', ['gameName' => 'APEX'])->assertUnauthorized();
+    }
+
+    public function test_owner_can_create_a_team_and_is_the_first_member(): void
+    {
+        $owner = User::factory()->create();
+
+        $response = $this->actingAs($owner)->postJson('/api/teams', [
+            'gameName' => 'APEX 英雄',
+            'note' => '晚上九点开局',
+        ]);
+
+        $response->assertCreated()
+            ->assertJsonPath('data.owner.id', $owner->id)
+            ->assertJsonPath('data.gameName', 'Florr.io')
+            ->assertJsonPath('data.owner.florrId', $owner->florr_id)
+            ->assertJsonPath('data.memberCount', 1)
+            ->assertJsonPath('data.members.0.id', $owner->id)
+            ->assertJsonPath('data.maxMembers', 4);
+        $this->assertDatabaseHas('team_members', ['user_id' => $owner->id]);
+    }
+
+    public function test_user_can_join_and_event_contains_only_public_profile_data(): void
+    {
+        Event::fake([TeamMemberJoined::class]);
+        [$team, $owner] = $this->createTeam();
+        $joiner = User::factory()->create([
+            'username' => 'new_member',
+            'florr_id' => 'florr-7788',
+            'avatar_url' => 'https://example.com/joiner.png',
+        ]);
+
+        $this->actingAs($joiner)->postJson("/api/teams/{$team->id}/join")
+            ->assertOk()
+            ->assertJsonPath('data.memberCount', 2);
+
+        Event::assertDispatched(TeamMemberJoined::class, function (TeamMemberJoined $event) use ($team, $joiner): bool {
+            $payload = $event->broadcastWith();
+
+            return $event->team->is($team)
+                && $event->joinedUser->is($joiner)
+                && $payload['joinedUser']['florrId'] === 'florr-7788'
+                && $payload['joinedUser']['avatarUrl'] === 'https://example.com/joiner.png'
+                && ! array_key_exists('password', $payload['joinedUser']);
+        });
+        $this->assertDatabaseHas('team_members', ['team_id' => $team->id, 'user_id' => $owner->id]);
+        $this->assertDatabaseHas('team_members', ['team_id' => $team->id, 'user_id' => $joiner->id]);
+    }
+
+    public function test_duplicate_join_and_fifth_member_are_rejected(): void
+    {
+        [$team] = $this->createTeam();
+        $members = User::factory()->count(4)->create();
+
+        $this->actingAs($members[0])->postJson("/api/teams/{$team->id}/join")->assertOk();
+        $this->actingAs($members[0])->postJson("/api/teams/{$team->id}/join")->assertConflict();
+        $this->actingAs($members[1])->postJson("/api/teams/{$team->id}/join")->assertOk();
+        $this->actingAs($members[2])->postJson("/api/teams/{$team->id}/join")->assertOk();
+        $this->actingAs($members[3])->postJson("/api/teams/{$team->id}/join")->assertConflict();
+
+        $this->assertSame(Team::MAX_MEMBERS, $team->members()->count());
+    }
+
+    public function test_member_can_leave_and_owner_must_close_instead(): void
+    {
+        [$team, $owner] = $this->createTeam();
+        $member = User::factory()->create();
+        $team->members()->attach($member, ['joined_at' => now()]);
+
+        $this->actingAs($owner)->deleteJson("/api/teams/{$team->id}/members/me")->assertUnprocessable();
+        $this->actingAs($member)->deleteJson("/api/teams/{$team->id}/members/me")->assertNoContent();
+        $this->assertDatabaseMissing('team_members', ['team_id' => $team->id, 'user_id' => $member->id]);
+    }
+
+    public function test_only_owner_can_close_and_closed_team_cannot_be_joined(): void
+    {
+        [$team, $owner] = $this->createTeam();
+        $other = User::factory()->create();
+
+        $this->actingAs($other)->postJson("/api/teams/{$team->id}/close")->assertForbidden();
+        $this->actingAs($owner)->postJson("/api/teams/{$team->id}/close")->assertOk();
+        $this->actingAs($other)->postJson("/api/teams/{$team->id}/join")->assertConflict();
+        $this->actingAs($other)->getJson('/api/teams')->assertJsonCount(0, 'data');
+    }
+
+    private function createTeam(): array
+    {
+        $owner = User::factory()->create();
+        $team = Team::create(['game_name' => 'Valorant', 'owner_id' => $owner->id]);
+        $team->members()->attach($owner, ['joined_at' => now()]);
+
+        return [$team, $owner];
+    }
+}
