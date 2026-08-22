@@ -64,6 +64,7 @@ export interface TeamMemberJoinedEvent {
   team: Pick<Team, 'id' | 'gameName'>
   joinedUser: User
   joinedAt: string
+  isAssembled?: boolean
 }
 
 export interface TeamAssembledEvent {

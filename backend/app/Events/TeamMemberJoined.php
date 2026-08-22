@@ -21,7 +21,9 @@ class TeamMemberJoined implements ShouldBroadcastNow
 
     public function broadcastOn(): array
     {
-        return [new PrivateChannel("team.{$this->team->id}")];
+        // The recruitment hall is visible to all authenticated users. A shared
+        // private channel lets every hall stay in sync without polling.
+        return [new PrivateChannel('teams')];
     }
 
     public function broadcastAs(): string
@@ -42,6 +44,9 @@ class TeamMemberJoined implements ShouldBroadcastNow
                 'avatarUrl' => $this->joinedUser->avatar_url,
             ],
             'joinedAt' => now()->toISOString(),
+            // Include the post-join state so clients cannot miss the assembled
+            // transition when their list subscription is refreshed.
+            'isAssembled' => $this->team->assembled_at !== null,
         ];
     }
 }

@@ -17,7 +17,7 @@ class TeamAssembled implements ShouldBroadcastNow
 
     public function broadcastOn(): array
     {
-        return [new PrivateChannel("team.{$this->team->id}")];
+        return [new PrivateChannel('teams')];
     }
 
     public function broadcastAs(): string

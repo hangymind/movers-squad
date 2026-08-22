@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Bell, BellOff, CheckCircle2, ChevronDown, Clock3, Link2, LogOut, Plus, RefreshCw, ShieldCheck, UsersRound, UserCog, XCircle } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { Avatar } from '../components/Avatar'
@@ -9,7 +9,7 @@ import { ProfileSettings } from '../components/ProfileSettings'
 import { api, getErrorMessage } from '../lib/api'
 import { createEcho } from '../lib/echo'
 import { requestNotificationPermissionOnEntry, showJoinNotification, showTeamAssembledNotification } from '../lib/notifications'
-import type { FlorrBindingReviewedEvent, Team, TeamAssembledEvent, TeamMemberJoinedEvent, User } from '../types'
+import type { FlorrBindingReviewedEvent, Team, TeamAssembledEvent, TeamClosedEvent, TeamMemberJoinedEvent, TeamMemberLeftEvent, User } from '../types'
 import { ErrorDialog } from '../components/ErrorDialog'
 
 interface DashboardPageProps { user: User; onUserUpdated: (user: User) => void; onLogout: () => Promise<void> }
@@ -28,6 +28,9 @@ export function DashboardPage({ user, onUserUpdated, onLogout }: DashboardPagePr
   const [userMenuOpen, setUserMenuOpen] = useState(false)
   const [bindingPromptOpen, setBindingPromptOpen] = useState(!user.isFlorrVerified && user.florrBinding?.status !== 'pending' && !user.florrBinding?.resultUnread)
   const [echo] = useState(() => createEcho(user.reverbKey ?? 'movers-local-key'))
+  const teamsRef = useRef<Team[]>([])
+
+  useEffect(() => { teamsRef.current = teams }, [teams])
 
   useEffect(() => {
     void requestNotificationPermissionOnEntry().then(setNotificationState)
@@ -75,31 +78,32 @@ export function DashboardPage({ user, onUserUpdated, onLogout }: DashboardPagePr
     return () => { echo.leave(`user.${user.id}`) }
   }, [echo, loadTeams, onUserUpdated, user.id])
 
-  const subscribedTeamIds = useMemo(
-    () => teams.filter((team) => team.members.some((member) => member.id === user.id)).map((team) => team.id).sort((a, b) => a - b),
-    [teams, user.id],
-  )
-  const subscriptionKey = subscribedTeamIds.join(',')
-
   useEffect(() => {
-    subscribedTeamIds.forEach((teamId) => {
-      const channel = echo.private(`team.${teamId}`)
-      channel.listen('.TeamMemberJoined', (event: TeamMemberJoinedEvent) => {
-        if (event.joinedUser.id === user.id) return
-        showJoinNotification(event, user.id)
-        void loadTeams(true)
-      })
-      channel.listen('.TeamAssembled', (event: TeamAssembledEvent) => {
-        showTeamAssembledNotification(event)
+    // Subscribe once for the recruitment hall. Team events are public because
+    // the hall itself is public; this keeps every user's cards synchronized.
+    const channel = echo.private('teams')
+    channel.listen('.TeamMemberJoined', (event: TeamMemberJoinedEvent) => {
+      const currentTeam = teamsRef.current.find((team) => team.id === event.team.id)
+      const isCurrentMember = currentTeam?.members.some((member) => member.id === user.id) ?? false
+      if (isCurrentMember && event.joinedUser.id !== user.id) showJoinNotification(event, user.id)
+      if (event.isAssembled && isCurrentMember) {
+        const assembledEvent: TeamAssembledEvent = { team: event.team, assembledAt: event.joinedAt }
+        showTeamAssembledNotification(assembledEvent)
         navigate(`/teams/${event.team.id}/room`)
-      })
+        return
+      }
+      void loadTeams(true)
     })
-
-    return () => {
-      subscribedTeamIds.forEach((teamId) => echo.leave(`team.${teamId}`))
-    }
-    // subscriptionKey is the stable representation of the subscribed list.
-  }, [echo, subscriptionKey, user.id, loadTeams]) // eslint-disable-line react-hooks/exhaustive-deps
+    channel.listen('.TeamAssembled', (event: TeamAssembledEvent) => {
+      const currentTeam = teamsRef.current.find((team) => team.id === event.team.id)
+      if (!currentTeam?.members.some((member) => member.id === user.id)) return
+      showTeamAssembledNotification(event)
+      navigate(`/teams/${event.team.id}/room`)
+    })
+    channel.listen('.TeamMemberLeft', (_event: TeamMemberLeftEvent) => { void loadTeams(true) })
+    channel.listen('.TeamClosed', (_event: TeamClosedEvent) => { void loadTeams(true) })
+    return () => { echo.leave('teams') }
+  }, [echo, user.id, loadTeams, navigate])
 
   const enableNotifications = async () => {
     setNotificationState(await requestNotificationPermissionOnEntry())
