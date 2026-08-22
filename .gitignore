@@ -1,3 +1,4 @@
 .codex/
 *.log
 Thumbs.db
+ssl/

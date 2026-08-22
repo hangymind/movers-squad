@@ -33,7 +33,7 @@ function App() {
   }, [navigate])
 
   if (loading) {
-    return <div className="app-loading" role="status"><span className="loading-mark">T</span><span>正在连接组队大厅...</span></div>
+    return <div className="app-loading" role="status"><span className="loading-mark">NAIDA</span><span>正在连接Websocket...</span></div>
   }
 
   return (
