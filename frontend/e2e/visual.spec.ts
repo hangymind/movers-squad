@@ -4,8 +4,9 @@ test('login screen is stable on desktop and mobile', async ({ browser }) => {
   for (const [name, viewport] of Object.entries({ desktop: { width: 1440, height: 900 }, mobile: { width: 390, height: 844 } })) {
     const context = await browser.newContext({ viewport })
     const page = await context.newPage()
+    await page.route('**/api/user', (route) => route.fulfill({ status: 401, json: { message: 'Unauthenticated.' } }))
     await page.goto('/login')
-    await expect(page.getByRole('heading', { name: '登录组队大厅' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: '欢迎后背' })).toBeVisible()
     await expect(page.getByRole('button', { name: '登录' })).toBeVisible()
 
     const metrics = await page.evaluate(() => ({
@@ -40,6 +41,12 @@ const unverifiedUser = {
   florrBinding: { id: null, status: 'unbound', submittedAt: null, reviewedAt: null, rejectionReason: null, resultUnread: false },
 }
 const screenshot = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=', 'base64')
+const verifiedUser = { ...unverifiedUser, isFlorrVerified: true, florrBinding: { ...unverifiedUser.florrBinding, status: 'approved' } }
+const recruitingTeam = {
+  id: 21, gameName: 'Florr.io', note: '夜间狩猎，准时集合。', minLevel: 30, excludedFlorrIds: ['Blocked_ID'],
+  owner: verifiedUser, members: [verifiedUser], memberCount: 1, maxMembers: 4, isFull: false, isAssembled: false,
+  assembledAt: null, closedAt: null, createdAt: new Date().toISOString(),
+}
 
 async function assertNoHorizontalOverflow(page: import('@playwright/test').Page) {
   const dimensions = await page.evaluate(() => ({ scroll: document.documentElement.scrollWidth, client: document.documentElement.clientWidth }))
@@ -94,6 +101,39 @@ test('admin approval and image resources remain usable on desktop and mobile', a
     await expect(page.getByText('全选当前页')).toBeVisible()
     await assertNoHorizontalOverflow(page)
     await page.screenshot({ path: `test-results/admin-images-${name}.png`, fullPage: true })
+    await context.close()
+  }
+})
+
+test('team details and assembled room fit desktop and mobile', async ({ browser }) => {
+  const assembledTeam = { ...recruitingTeam, members: [verifiedUser, { ...verifiedUser, id: 8, florrId: 'Member_08', level: 65 }], memberCount: 2, isFull: false, isAssembled: true, assembledAt: new Date().toISOString() }
+  for (const [name, viewport] of Object.entries({ desktop: { width: 1440, height: 900 }, mobile: { width: 390, height: 844 } })) {
+    const context = await browser.newContext({ viewport })
+    const page = await context.newPage()
+    await page.route('**/api/**', (route) => {
+      const path = new URL(route.request().url()).pathname
+      if (path === '/api/user') return route.fulfill({ json: { data: verifiedUser } })
+      if (path === '/api/teams/current') return route.fulfill({ json: { data: null } })
+      if (path === '/api/teams') return route.fulfill({ json: { data: [recruitingTeam] } })
+      if (path === '/api/teams/21') return route.fulfill({ json: { data: assembledTeam } })
+      if (path === '/api/teams/21/messages') return route.fulfill({ json: { data: [{ id: 1, teamId: 21, sender: verifiedUser, body: '准备好了。', createdAt: new Date().toISOString() }], meta: { hasMore: false, nextBefore: null, unreadCount: 0 } } })
+      if (path === '/api/teams/21/messages/read') return route.fulfill({ status: 204 })
+      return route.fulfill({ json: { data: null } })
+    })
+
+    await page.goto('/')
+    await page.getByLabel('查看 Florr.io 组队详情').click()
+    await expect(page.getByRole('dialog', { name: 'Florr.io' })).toBeVisible()
+    await expect(page.getByText('等级 42 · 队长')).toBeVisible()
+    await assertNoHorizontalOverflow(page)
+    await page.screenshot({ path: `test-results/team-detail-${name}.png`, fullPage: true })
+
+    await page.goto('/teams/21/room')
+    await expect(page.getByRole('heading', { name: '队伍聊天' })).toBeVisible()
+    await expect(page.getByText('准备好了。')).toBeVisible()
+    await expect(page.getByRole('button', { name: '加入语音' })).toBeVisible()
+    await assertNoHorizontalOverflow(page)
+    await page.screenshot({ path: `test-results/team-room-${name}.png`, fullPage: true })
     await context.close()
   }
 })

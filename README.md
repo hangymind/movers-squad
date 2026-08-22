@@ -9,6 +9,8 @@
 - 每队最多 4 人，支持加入、成员退出、队长关闭招募
 - MySQL 事务与行锁防止并发超员
 - 私有 Reverb 频道和浏览器 Notification API
+- 满员后进入持久化文字房间，并通过自建 LiveKit 提供 4 人音频通话
+- 招募详情、唯一活跃队伍限制和全局构建版本标识
 - 管理员用户管理、Ban ID 搜索、封禁/解封和密码重置
 - Florr 游戏截图绑定、管理员审批、私有图片资源管理和绑定结果补发
 - 首次注册精确 Florr ID `Xyiw46_` 的玩家自动获得管理员权限
@@ -37,7 +39,7 @@
    composer install
    cp .env.example .env
    php artisan key:generate
-   # 在 .env 中填写 DB_USERNAME、DB_PASSWORD 和 Reverb 密钥
+   # 在 .env 中填写 DB_USERNAME、DB_PASSWORD、Reverb 密钥和 LIVEKIT_* 配置
    php artisan migrate
    php artisan serve --host=127.0.0.1 --port=8000
    ```
@@ -58,7 +60,7 @@
    npm run dev
    ```
 
-访问 `http://localhost:9191`。Vite 会将 `/api`、`/sanctum`、`/broadcasting` 和 Reverb WebSocket 转发到内部服务。注册或登录后，在顶栏点击“开启通知”并允许浏览器通知。
+访问 `http://localhost:9191`。Vite 会将 `/api`、`/sanctum`、`/broadcasting` 和 Reverb WebSocket 转发到内部服务。登录进入大厅时会自动申请浏览器通知权限；浏览器拦截时可使用顶栏按钮重试。语音服务搭建见 [`vcserver.md`](vcserver.md)。
 
 ## 测试
 

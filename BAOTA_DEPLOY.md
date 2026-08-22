@@ -44,6 +44,9 @@ REVERB_APP_ACCEPT_CLIENT_EVENTS_FROM=none
 REVERB_APP_RATE_LIMITING_ENABLED=true
 REVERB_APP_RATE_LIMIT_TERMINATE=true
 REVERB_APP_MAX_CONNECTIONS=1000
+LIVEKIT_URL=wss://voice.你的域名
+LIVEKIT_API_KEY=语音服务器APIKey
+LIVEKIT_API_SECRET=至少32字节的语音服务器Secret
 ```
 
 生成随机 `REVERB_APP_ID`、`REVERB_APP_KEY`、`REVERB_APP_SECRET`。这三项是 Reverb 识别和签名连接所必需的，不能删除；其中 Key 会由登录接口安全地作为公开连接标识返回，只有 Secret 必须严格保存在服务器。前端不再需要任何 `VITE_REVERB_*` 配置。然后执行：
@@ -83,8 +86,8 @@ add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" alway
 add_header X-Content-Type-Options "nosniff" always;
 add_header X-Frame-Options "DENY" always;
 add_header Referrer-Policy "no-referrer" always;
-add_header Permissions-Policy "camera=(), microphone=(), geolocation=()" always;
-add_header Content-Security-Policy "default-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; object-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' https: data: blob:; font-src 'self'; connect-src 'self' ws: wss:" always;
+add_header Permissions-Policy "camera=(), microphone=(self), geolocation=()" always;
+add_header Content-Security-Policy "default-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; object-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' https: data: blob:; font-src 'self'; connect-src 'self' ws: wss: wss://voice.你的域名;" always;
 
 location / {
     try_files $uri $uri/ /index.html;
@@ -138,6 +141,8 @@ stdout_logfile=/www/wwwroot/movers-squad/backend/storage/logs/reverb.log
 ```
 
 给 `storage`、`bootstrap/cache` 写权限并启用站点 HTTPS。
+
+语音服务使用独立 LiveKit 主机或子域名，完整 Docker、端口、TURN 和排障步骤见根目录 [`vcserver.md`](vcserver.md)。
 
 不要代理或公开 `.env`、`storage/app/private`、数据库文件和日志目录；生产环境保持 `APP_DEBUG=false`，数据库账户只授予当前数据库所需权限。
 

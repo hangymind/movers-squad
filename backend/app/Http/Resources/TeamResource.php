@@ -23,6 +23,8 @@ class TeamResource extends JsonResource
             'memberCount' => $memberCount,
             'maxMembers' => Team::MAX_MEMBERS,
             'isFull' => $memberCount >= Team::MAX_MEMBERS,
+            'isAssembled' => $this->assembled_at !== null,
+            'assembledAt' => $this->assembled_at?->toISOString(),
             'closedAt' => $this->closed_at?->toISOString(),
             'createdAt' => $this->created_at?->toISOString(),
         ];

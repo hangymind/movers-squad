@@ -68,7 +68,7 @@ class User extends Authenticatable
     public function teams(): BelongsToMany
     {
         return $this->belongsToMany(Team::class, 'team_members')
-            ->withPivot('joined_at');
+            ->withPivot(['joined_at', 'last_read_message_id']);
     }
 
     public function florrBindingApplications(): HasMany

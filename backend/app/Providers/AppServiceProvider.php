@@ -42,6 +42,14 @@ class AppServiceProvider extends ServiceProvider
             Limit::perMinute(10)->by('team-user|'.$request->user()->id),
             Limit::perMinute(30)->by('team-ip|'.$request->ip()),
         ]);
+        RateLimiter::for('chat', fn (Request $request) => [
+            Limit::perMinute(30)->by('chat-user|'.$request->user()->id),
+            Limit::perMinute(90)->by('chat-ip|'.$request->ip()),
+        ]);
+        RateLimiter::for('voice', fn (Request $request) => [
+            Limit::perMinute(12)->by('voice-user|'.$request->user()->id),
+            Limit::perMinute(36)->by('voice-ip|'.$request->ip()),
+        ]);
         RateLimiter::for('upload', fn (Request $request) => [
             Limit::perHour(3)->by('upload-user|'.$request->user()->id),
             Limit::perHour(10)->by('upload-ip|'.$request->ip()),

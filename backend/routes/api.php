@@ -2,6 +2,8 @@
 
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\TeamController;
+use App\Http\Controllers\TeamMessageController;
+use App\Http\Controllers\TeamVoiceController;
 use App\Http\Controllers\AdminUserController;
 use App\Http\Controllers\AdminFlorrBindingController;
 use App\Http\Controllers\FlorrBindingController;
@@ -21,10 +23,16 @@ Route::middleware('auth:sanctum')->group(function (): void {
 
     Route::middleware('not_banned')->group(function (): void {
         Route::get('/teams', [TeamController::class, 'index'])->middleware('throttle:read');
+        Route::get('/teams/current', [TeamController::class, 'current'])->middleware('throttle:read');
+        Route::get('/teams/{teamId}', [TeamController::class, 'show'])->middleware('throttle:read');
         Route::post('/teams', [TeamController::class, 'store'])->middleware(['florr_verified', 'throttle:team-action']);
         Route::post('/teams/{teamId}/join', [TeamController::class, 'join'])->middleware(['florr_verified', 'throttle:team-action']);
         Route::delete('/teams/{teamId}/members/me', [TeamController::class, 'leave'])->middleware('throttle:team-action');
         Route::post('/teams/{teamId}/close', [TeamController::class, 'close'])->middleware('throttle:team-action');
+        Route::get('/teams/{teamId}/messages', [TeamMessageController::class, 'index'])->middleware('throttle:read');
+        Route::post('/teams/{teamId}/messages', [TeamMessageController::class, 'store'])->middleware('throttle:chat');
+        Route::post('/teams/{teamId}/messages/read', [TeamMessageController::class, 'read'])->middleware('throttle:write');
+        Route::post('/teams/{teamId}/voice-token', [TeamVoiceController::class, 'token'])->middleware('throttle:voice');
     });
 
     Route::prefix('admin')->middleware('admin')->group(function (): void {

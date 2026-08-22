@@ -7,6 +7,7 @@ interface TeamCardProps {
   currentUser: User
   busy: boolean
   onAction: (team: Team, action: 'join' | 'leave' | 'close') => void
+  onOpen: (team: Team) => void
 }
 
 const relativeTime = new Intl.RelativeTimeFormat('zh-CN', { numeric: 'auto' })
@@ -19,12 +20,12 @@ function formatCreatedAt(value: string) {
   return new Date(value).toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' })
 }
 
-export function TeamCard({ team, currentUser, busy, onAction }: TeamCardProps) {
+export function TeamCard({ team, currentUser, busy, onAction, onOpen }: TeamCardProps) {
   const isOwner = team.owner.id === currentUser.id
   const isMember = team.members.some((member) => member.id === currentUser.id)
 
   return (
-    <article className="team-card">
+    <article className="team-card team-card-clickable" tabIndex={0} aria-label={`查看 ${team.gameName} 组队详情`} onClick={() => onOpen(team)} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onOpen(team) } }}>
       <header className="team-card-primary">
         <div className="team-card-meta">{team.isFull ? <span className="status status-full">已满员</span> : <span className="status">招募中</span>}<span className="created-time"><Clock3 size={13} />{formatCreatedAt(team.createdAt)}</span></div>
         <h3>{team.gameName}</h3>
@@ -45,11 +46,11 @@ export function TeamCard({ team, currentUser, busy, onAction }: TeamCardProps) {
       </div>
 
       <div className="team-card-action">{isOwner ? (
-          <button className="button-danger" type="button" disabled={busy} onClick={() => onAction(team, 'close')}><XCircle size={17} />{busy ? '处理中...' : '关闭招募'}</button>
+          <button className="button-danger" type="button" disabled={busy} onClick={(event) => { event.stopPropagation(); onAction(team, 'close') }}><XCircle size={17} />{busy ? '处理中...' : '关闭招募'}</button>
         ) : isMember ? (
-          <button className="button-secondary card-action" type="button" disabled={busy} onClick={() => onAction(team, 'leave')}><LogOut size={17} />{busy ? '处理中...' : '退出队伍'}</button>
+          <button className="button-secondary card-action" type="button" disabled={busy} onClick={(event) => { event.stopPropagation(); onAction(team, 'leave') }}><LogOut size={17} />{busy ? '处理中...' : '退出队伍'}</button>
         ) : (
-          <button className="button-primary card-action" type="button" disabled={busy || team.isFull} onClick={() => onAction(team, 'join')}><LogIn size={17} />{team.isFull ? '队伍已满' : busy ? '加入中...' : '加入队伍'}</button>
+          <button className="button-primary card-action" type="button" disabled={busy || team.isFull} onClick={(event) => { event.stopPropagation(); onAction(team, 'join') }}><LogIn size={17} />{team.isFull ? '队伍已满' : busy ? '加入中...' : '加入队伍'}</button>
         )}</div>
     </article>
   )

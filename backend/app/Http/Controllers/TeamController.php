@@ -2,10 +2,14 @@
 
 namespace App\Http\Controllers;
 
+use App\Events\TeamAssembled;
+use App\Events\TeamClosed;
 use App\Events\TeamMemberJoined;
+use App\Events\TeamMemberLeft;
 use App\Http\Resources\TeamResource;
 use App\Models\Team;
 use App\Models\User;
+use App\Services\LiveKitRoomManager;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
@@ -16,16 +20,41 @@ use Throwable;
 
 class TeamController extends Controller
 {
+    public function __construct(private readonly LiveKitRoomManager $liveKit) {}
+
     public function index(): AnonymousResourceCollection
     {
         $teams = Team::query()
             ->whereNull('closed_at')
+            ->whereNull('assembled_at')
             ->with(['owner:id,username,florr_id,level,avatar_url,florr_verified_at', 'members:id,username,florr_id,level,avatar_url,florr_verified_at'])
             ->withCount('members')
             ->latest()
             ->get();
 
         return TeamResource::collection($teams);
+    }
+
+    public function current(Request $request): JsonResponse
+    {
+        $team = Team::query()
+            ->whereNull('closed_at')
+            ->whereHas('members', fn ($query) => $query->whereKey($request->user()->id))
+            ->with(['owner:id,username,florr_id,level,avatar_url,florr_verified_at', 'members:id,username,florr_id,level,avatar_url,florr_verified_at'])
+            ->withCount('members')
+            ->first();
+
+        return response()->json(['data' => $team ? (new TeamResource($team))->resolve($request) : null]);
+    }
+
+    public function show(Request $request, int $teamId): TeamResource
+    {
+        $team = Team::query()->whereKey($teamId)->whereNull('closed_at')->firstOrFail();
+        if ($team->assembled_at !== null) {
+            abort_unless($team->members()->whereKey($request->user()->id)->exists(), 404);
+        }
+
+        return new TeamResource($this->loadTeam($team));
     }
 
     public function store(Request $request): JsonResponse
@@ -39,14 +68,16 @@ class TeamController extends Controller
         $excludedIds = collect($data['excludedFlorrIds'] ?? [])->map(fn (string $id) => trim($id))->filter()->unique()->values()->all();
 
         $team = DB::transaction(function () use ($request, $data, $excludedIds): Team {
+            $user = User::query()->lockForUpdate()->findOrFail($request->user()->id);
+            $this->ensureNoActiveTeam($user);
             $team = Team::create([
                 'game_name' => 'Florr.io',
                 'note' => isset($data['note']) && trim($data['note']) !== '' ? trim($data['note']) : null,
                 'min_level' => $data['minLevel'] ?? 1,
                 'excluded_florr_ids' => $excludedIds,
-                'owner_id' => $request->user()->id,
+                'owner_id' => $user->id,
             ]);
-            $team->members()->attach($request->user()->id, ['joined_at' => now()]);
+            $team->members()->attach($user->id, ['joined_at' => now()]);
 
             return $team;
         });
@@ -59,11 +90,17 @@ class TeamController extends Controller
         /** @var User $user */
         $user = $request->user();
 
-        $team = DB::transaction(function () use ($teamId, $user): Team {
+        [$team, $assembled] = DB::transaction(function () use ($teamId, $user): array {
+            $user = User::query()->lockForUpdate()->findOrFail($user->id);
+            $this->ensureNoActiveTeam($user);
             $team = Team::query()->lockForUpdate()->findOrFail($teamId);
 
             if ($team->closed_at !== null) {
                 throw new ConflictHttpException('该招募已关闭。');
+            }
+
+            if ($team->assembled_at !== null) {
+                throw new ConflictHttpException('该队伍已经成队。');
             }
 
             if ($team->members()->whereKey($user->id)->exists()) {
@@ -82,8 +119,12 @@ class TeamController extends Controller
             }
 
             $team->members()->attach($user->id, ['joined_at' => now()]);
+            $assembled = $team->members()->count() >= Team::MAX_MEMBERS;
+            if ($assembled) {
+                $team->update(['assembled_at' => now()]);
+            }
 
-            return $team;
+            return [$team, $assembled];
         });
 
         try {
@@ -93,12 +134,20 @@ class TeamController extends Controller
             report($exception);
         }
 
+        if ($assembled) {
+            try {
+                TeamAssembled::dispatch($team);
+            } catch (Throwable $exception) {
+                report($exception);
+            }
+        }
+
         return new TeamResource($this->loadTeam($team));
     }
 
     public function leave(Request $request, int $teamId): JsonResponse
     {
-        DB::transaction(function () use ($request, $teamId): void {
+        $team = DB::transaction(function () use ($request, $teamId): Team {
             $team = Team::query()->lockForUpdate()->findOrFail($teamId);
 
             if ($team->owner_id === $request->user()->id) {
@@ -110,7 +159,22 @@ class TeamController extends Controller
             }
 
             $team->members()->detach($request->user()->id);
+
+            return $team;
         });
+
+        try {
+            TeamMemberLeft::dispatch($team, $request->user());
+        } catch (Throwable $exception) {
+            report($exception);
+        }
+        if ($team->assembled_at !== null) {
+            try {
+                $this->liveKit->removeParticipant($team->id, $request->user()->id);
+            } catch (Throwable $exception) {
+                report($exception);
+            }
+        }
 
         return response()->json(null, 204);
     }
@@ -131,6 +195,19 @@ class TeamController extends Controller
             return $team;
         });
 
+        try {
+            TeamClosed::dispatch($team);
+        } catch (Throwable $exception) {
+            report($exception);
+        }
+        if ($team->assembled_at !== null) {
+            try {
+                $this->liveKit->deleteRoom($team->id);
+            } catch (Throwable $exception) {
+                report($exception);
+            }
+        }
+
         return new TeamResource($this->loadTeam($team));
     }
 
@@ -139,5 +216,17 @@ class TeamController extends Controller
         return $team->fresh()
             ->load(['owner:id,username,florr_id,level,avatar_url,florr_verified_at', 'members:id,username,florr_id,level,avatar_url,florr_verified_at'])
             ->loadCount('members');
+    }
+
+    private function ensureNoActiveTeam(User $user): void
+    {
+        $activeTeam = Team::query()
+            ->whereNull('closed_at')
+            ->whereHas('members', fn ($query) => $query->whereKey($user->id))
+            ->first();
+
+        if ($activeTeam !== null) {
+            throw new ConflictHttpException('你已经加入了一支未关闭的队伍。');
+        }
     }
 }

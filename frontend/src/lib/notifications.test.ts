@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { showJoinNotification } from './notifications'
-import type { TeamMemberJoinedEvent } from '../types'
+import { requestNotificationPermissionOnEntry, showJoinNotification, showTeamAssembledNotification } from './notifications'
+import type { TeamAssembledEvent, TeamMemberJoinedEvent } from '../types'
 
 const event: TeamMemberJoinedEvent = {
   team: { id: 8, gameName: 'APEX 英雄' },
@@ -33,5 +33,19 @@ describe('showJoinNotification', () => {
     Object.defineProperty(notification, 'permission', { value: 'denied', configurable: true })
     expect(showJoinNotification(event, 1)).toBeNull()
     expect(notification).not.toHaveBeenCalled()
+  })
+
+  it('requests notification permission automatically only once', async () => {
+    Object.defineProperty(notification, 'permission', { value: 'default', configurable: true })
+    const requestPermission = vi.fn().mockResolvedValue('granted')
+    Object.defineProperty(notification, 'requestPermission', { value: requestPermission, configurable: true })
+    await Promise.all([requestNotificationPermissionOnEntry(), requestNotificationPermissionOnEntry()])
+    expect(requestPermission).toHaveBeenCalledTimes(1)
+  })
+
+  it('shows a stable full-team notification', () => {
+    const assembled: TeamAssembledEvent = { team: { id: 8, gameName: 'Florr.io' }, assembledAt: '2026-08-22T12:00:00Z' }
+    showTeamAssembledNotification(assembled)
+    expect(notification).toHaveBeenCalledWith('队伍已满，准备出发', expect.objectContaining({ tag: 'team-8-assembled' }))
   })
 })

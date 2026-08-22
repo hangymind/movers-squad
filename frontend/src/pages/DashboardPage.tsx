@@ -4,11 +4,12 @@ import { useNavigate } from 'react-router-dom'
 import { Avatar } from '../components/Avatar'
 import { CreateTeamForm } from '../components/CreateTeamForm'
 import { TeamCard } from '../components/TeamCard'
+import { TeamDetailsDrawer } from '../components/TeamDetailsDrawer'
 import { ProfileSettings } from '../components/ProfileSettings'
 import { api, getErrorMessage } from '../lib/api'
 import { createEcho } from '../lib/echo'
-import { showJoinNotification } from '../lib/notifications'
-import type { FlorrBindingReviewedEvent, Team, TeamMemberJoinedEvent, User } from '../types'
+import { requestNotificationPermissionOnEntry, showJoinNotification, showTeamAssembledNotification } from '../lib/notifications'
+import type { FlorrBindingReviewedEvent, Team, TeamAssembledEvent, TeamMemberJoinedEvent, User } from '../types'
 import { ErrorDialog } from '../components/ErrorDialog'
 
 interface DashboardPageProps { user: User; onUserUpdated: (user: User) => void; onLogout: () => Promise<void> }
@@ -23,9 +24,14 @@ export function DashboardPage({ user, onUserUpdated, onLogout }: DashboardPagePr
   const [busyTeamId, setBusyTeamId] = useState<number | null>(null)
   const [notificationState, setNotificationState] = useState<NotificationState>('Notification' in window ? Notification.permission : 'unsupported')
   const [profileOpen, setProfileOpen] = useState(false)
+  const [selectedTeam, setSelectedTeam] = useState<Team | null>(null)
   const [userMenuOpen, setUserMenuOpen] = useState(false)
   const [bindingPromptOpen, setBindingPromptOpen] = useState(!user.isFlorrVerified && user.florrBinding?.status !== 'pending' && !user.florrBinding?.resultUnread)
   const [echo] = useState(() => createEcho(user.reverbKey ?? 'movers-local-key'))
+
+  useEffect(() => {
+    void requestNotificationPermissionOnEntry().then(setNotificationState)
+  }, [])
 
   useEffect(() => {
     if (!userMenuOpen) return
@@ -52,7 +58,12 @@ export function DashboardPage({ user, onUserUpdated, onLogout }: DashboardPagePr
 
   // Loading remote team state is the synchronization this effect owns.
   // oxlint-disable-next-line react/set-state-in-effect
-  useEffect(() => { void loadTeams() }, [loadTeams])
+  useEffect(() => {
+    api.get<{ data: Team | null }>('/teams/current').then(({ data }) => {
+      if (data.data?.isAssembled) navigate(`/teams/${data.data.id}/room`, { replace: true })
+      else void loadTeams()
+    }).catch(() => void loadTeams())
+  }, [loadTeams, navigate])
 
   useEffect(() => () => echo.disconnect(), [echo])
 
@@ -72,10 +83,15 @@ export function DashboardPage({ user, onUserUpdated, onLogout }: DashboardPagePr
 
   useEffect(() => {
     subscribedTeamIds.forEach((teamId) => {
-      echo.private(`team.${teamId}`).listen('.TeamMemberJoined', (event: TeamMemberJoinedEvent) => {
+      const channel = echo.private(`team.${teamId}`)
+      channel.listen('.TeamMemberJoined', (event: TeamMemberJoinedEvent) => {
         if (event.joinedUser.id === user.id) return
         showJoinNotification(event, user.id)
         void loadTeams(true)
+      })
+      channel.listen('.TeamAssembled', (event: TeamAssembledEvent) => {
+        showTeamAssembledNotification(event)
+        navigate(`/teams/${event.team.id}/room`)
       })
     })
 
@@ -86,8 +102,7 @@ export function DashboardPage({ user, onUserUpdated, onLogout }: DashboardPagePr
   }, [echo, subscriptionKey, user.id, loadTeams]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const enableNotifications = async () => {
-    if (!('Notification' in window)) return
-    setNotificationState(await Notification.requestPermission())
+    setNotificationState(await requestNotificationPermissionOnEntry())
   }
 
   const handleAction = async (team: Team, action: 'join' | 'leave' | 'close') => {
@@ -95,7 +110,15 @@ export function DashboardPage({ user, onUserUpdated, onLogout }: DashboardPagePr
     setBusyTeamId(team.id)
     setError('')
     try {
-      if (action === 'join') await api.post(`/teams/${team.id}/join`)
+      if (action === 'join') {
+        const { data } = await api.post<{ data: Team }>(`/teams/${team.id}/join`)
+        if (data.data.isAssembled) {
+          const event = { team: { id: data.data.id, gameName: data.data.gameName }, assembledAt: data.data.assembledAt ?? new Date().toISOString() }
+          showTeamAssembledNotification(event)
+          navigate(`/teams/${team.id}/room`)
+          return
+        }
+      }
       if (action === 'leave') await api.delete(`/teams/${team.id}/members/me`)
       if (action === 'close') await api.post(`/teams/${team.id}/close`)
       await loadTeams(true)
@@ -139,7 +162,7 @@ export function DashboardPage({ user, onUserUpdated, onLogout }: DashboardPagePr
           <div className="brand-lockup"><span>Movers Squad</span><small>伐木.io</small></div>
           <nav className="main-nav" aria-label="主导航"><a className="active" href="#teams">招募</a></nav>
           <div className="topbar-actions">
-            <button className={`notification-button notification-${notificationState}`} type="button" onClick={enableNotifications} disabled={notificationState === 'unsupported'} title="系统通知权限">
+            <button className={`notification-button notification-${notificationState}`} type="button" onClick={enableNotifications} disabled={notificationState === 'unsupported'} title={notificationState === 'denied' ? '请在浏览器站点设置中允许通知' : '系统通知权限'}>
               {notificationState === 'granted' ? <Bell size={17} /> : <BellOff size={17} />}
               <span>{notificationState === 'granted' ? '通知已开启' : notificationState === 'denied' ? '通知已拒绝' : notificationState === 'unsupported' ? '不支持通知' : '开启通知'}</span>
             </button>
@@ -178,13 +201,14 @@ export function DashboardPage({ user, onUserUpdated, onLogout }: DashboardPagePr
           ) : visibleTeams.length === 0 ? (
             <div className="empty-state"><span><UsersRound size={24} /></span><h3>目前还没有招募</h3><p>发布第一条招募，等待队友加入。</p><button className="button-primary" type="button" onClick={openCreate}><Plus size={18} />发布招募</button></div>
           ) : (
-            <div className="team-grid">{visibleTeams.map((team) => <TeamCard key={team.id} team={team} currentUser={user} busy={busyTeamId === team.id} onAction={handleAction} />)}</div>
+            <div className="team-grid">{visibleTeams.map((team) => <TeamCard key={team.id} team={team} currentUser={user} busy={busyTeamId === team.id} onAction={handleAction} onOpen={setSelectedTeam} />)}</div>
           )}
         </section>
       </main>
 
       <CreateTeamForm open={createOpen} onClose={() => setCreateOpen(false)} onCreated={(team) => { setTeams((current) => [team, ...current]); setCreateOpen(false) }} />
       <ProfileSettings user={{ ...user, level: user.level ?? 1 }} open={profileOpen} onClose={() => setProfileOpen(false)} onSaved={onUserUpdated} />
+      <TeamDetailsDrawer team={selectedTeam} onClose={() => setSelectedTeam(null)} />
       <ErrorDialog message={error} onClose={() => setError('')} />
       {bindingPromptOpen && <div className="modal-backdrop"><section className="modal binding-prompt" role="dialog" aria-modal="true" aria-labelledby="binding-prompt-title"><span className="section-icon"><Link2 size={20} /></span><h2 id="binding-prompt-title">绑定 Florr 账户</h2><p>完成游戏账户验证后，才能发布招募或加入队伍。</p><div className="modal-actions"><button className="button-secondary" type="button" onClick={() => setBindingPromptOpen(false)}>暂时忽略</button><button className="button-primary" type="button" onClick={() => navigate('/bind-florr')}>去绑定</button></div></section></div>}
       {user.florrBinding?.resultUnread && <div className="modal-backdrop result-backdrop"><section className="modal binding-result" role="alertdialog" aria-modal="true">{user.florrBinding.status === 'approved' ? <><CheckCircle2 className="result-approved" size={43} /><h2>Florr 绑定已通过</h2><p>你的账户已完成验证，发布招募和加入队伍功能现已解锁。</p><button className="button-primary" type="button" onClick={() => void acknowledgeResult()}>知道了</button></> : <><XCircle className="result-rejected" size={43} /><h2>Florr 绑定未通过</h2><p className="rejection-copy">{user.florrBinding.rejectionReason}</p><div className="modal-actions"><button className="button-secondary" type="button" onClick={() => void acknowledgeResult()}>稍后处理</button><button className="button-primary" type="button" onClick={() => void reapply()}>重新申请</button></div></>}</section></div>}
