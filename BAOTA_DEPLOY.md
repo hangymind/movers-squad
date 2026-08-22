@@ -35,10 +35,10 @@ SESSION_ENCRYPT=true
 SESSION_SECURE_COOKIE=true
 SANCTUM_STATEFUL_DOMAINS=你的域名
 REVERB_HOST=127.0.0.1
-REVERB_PORT=9191
+REVERB_PORT=18081
 REVERB_SCHEME=http
 REVERB_SERVER_HOST=127.0.0.1
-REVERB_SERVER_PORT=9191
+REVERB_SERVER_PORT=18081
 REVERB_ALLOWED_ORIGINS=https://你的域名
 REVERB_APP_ACCEPT_CLIENT_EVENTS_FROM=none
 REVERB_APP_RATE_LIMITING_ENABLED=true
@@ -105,7 +105,7 @@ location ^~ /broadcasting/ {
 
 location ^~ /app/ {
     limit_conn movers_ws_per_ip 10;
-    proxy_pass http://127.0.0.1:9191;
+    proxy_pass http://127.0.0.1:18081;
     proxy_http_version 1.1;
     proxy_set_header Upgrade $http_upgrade;
     proxy_set_header Connection "upgrade";
@@ -120,7 +120,7 @@ location ^~ /app/ {
 }
 ```
 
-浏览器始终连接 `wss://你的域名/app/{REVERB_APP_KEY}`，不会看到或连接内部 `9191` 端口。生产环境由 Nginx 直接提供构建后的静态页面，因此不需要运行 Vite；`9191` 仅供 Reverb 在回环地址监听。启用前先执行 `ss -lntp | grep ':9191'`，确认该端口没有被宝塔或其他服务占用。
+浏览器始终连接 `wss://你的域名/app/{REVERB_APP_KEY}`，不会看到或连接内部 `18081` 端口。生产环境由 Nginx 直接提供构建后的静态页面，因此不需要运行 Vite；`18081` 仅作为 Reverb 的示例回环端口。启用前先执行 `ss -lntp | grep ':18081'`，必须确认该端口没有被宝塔或其他服务占用；若已占用，应选择另一个空闲高位端口，并同步修改 `.env`、Supervisor 和 Nginx 三处。
 
 在 PHP 8.3 的 `php.ini` 中将 `upload_max_filesize` 设置为 `10M`、`post_max_size` 设置为 `12M`，然后重载 PHP-FPM 和 Nginx。绑定截图由 Laravel 存放在 `storage/app/private/florr-bindings`，不要将该目录配置为公开静态资源。
 
@@ -128,7 +128,7 @@ location ^~ /app/ {
 
 ```ini
 [program:movers-reverb]
-command=/www/server/php/83/bin/php artisan reverb:start --host=127.0.0.1 --port=9191
+command=/www/server/php/83/bin/php artisan reverb:start --host=127.0.0.1 --port=18081
 directory=/www/wwwroot/movers-squad/backend
 autostart=true
 autorestart=true
