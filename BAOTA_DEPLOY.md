@@ -35,10 +35,10 @@ SESSION_ENCRYPT=true
 SESSION_SECURE_COOKIE=true
 SANCTUM_STATEFUL_DOMAINS=你的域名
 REVERB_HOST=127.0.0.1
-REVERB_PORT=8081
+REVERB_PORT=9191
 REVERB_SCHEME=http
 REVERB_SERVER_HOST=127.0.0.1
-REVERB_SERVER_PORT=8081
+REVERB_SERVER_PORT=9191
 REVERB_ALLOWED_ORIGINS=https://你的域名
 REVERB_APP_ACCEPT_CLIENT_EVENTS_FROM=none
 REVERB_APP_RATE_LIMITING_ENABLED=true
@@ -105,20 +105,22 @@ location ^~ /broadcasting/ {
 
 location ^~ /app/ {
     limit_conn movers_ws_per_ip 10;
-    proxy_pass http://127.0.0.1:8081;
+    proxy_pass http://127.0.0.1:9191;
     proxy_http_version 1.1;
     proxy_set_header Upgrade $http_upgrade;
-    proxy_set_header Connection "Upgrade";
-    proxy_set_header Host $host;
+    proxy_set_header Connection "upgrade";
+    proxy_set_header Host $http_host;
+    proxy_set_header Origin $http_origin;
     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
     proxy_set_header X-Forwarded-Proto $scheme;
-    proxy_read_timeout 70s;
-    proxy_send_timeout 70s;
+    proxy_read_timeout 3600s;
+    proxy_send_timeout 3600s;
     proxy_buffering off;
+    proxy_request_buffering off;
 }
 ```
 
-浏览器始终连接 `wss://你的域名/app/{REVERB_APP_KEY}`，不会看到或连接内部 `8081` 端口。Nginx 负责把 `/app/` 转发给仅监听 `127.0.0.1:8081` 的 Reverb；应用页面使用的 `9191` 与 Reverb 内部监听端口不是同一个服务，不能互相替代。
+浏览器始终连接 `wss://你的域名/app/{REVERB_APP_KEY}`，不会看到或连接内部 `9191` 端口。生产环境由 Nginx 直接提供构建后的静态页面，因此不需要运行 Vite；`9191` 仅供 Reverb 在回环地址监听。启用前先执行 `ss -lntp | grep ':9191'`，确认该端口没有被宝塔或其他服务占用。
 
 在 PHP 8.3 的 `php.ini` 中将 `upload_max_filesize` 设置为 `10M`、`post_max_size` 设置为 `12M`，然后重载 PHP-FPM 和 Nginx。绑定截图由 Laravel 存放在 `storage/app/private/florr-bindings`，不要将该目录配置为公开静态资源。
 
@@ -126,7 +128,7 @@ location ^~ /app/ {
 
 ```ini
 [program:movers-reverb]
-command=/www/server/php/83/bin/php artisan reverb:start --host=127.0.0.1 --port=8081
+command=/www/server/php/83/bin/php artisan reverb:start --host=127.0.0.1 --port=9191
 directory=/www/wwwroot/movers-squad/backend
 autostart=true
 autorestart=true
