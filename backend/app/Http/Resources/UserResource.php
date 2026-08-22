@@ -2,6 +2,7 @@
 
 namespace App\Http\Resources;
 
+use App\Rules\SafeAvatarUrl;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -18,7 +19,7 @@ class UserResource extends JsonResource
             'florrId' => $this->florr_id,
             'level' => $this->level,
             'isFlorrVerified' => $this->florr_verified_at !== null,
-            'avatarUrl' => $this->avatar_url,
+            'avatarUrl' => SafeAvatarUrl::isValid($this->avatar_url) ? $this->avatar_url : null,
             'isAdmin' => $this->when($canViewPrivate, (bool) $this->is_admin),
             'isBanned' => $this->when($canViewPrivate, $this->banned_at !== null),
             'banId' => $this->when($canViewPrivate, $this->ban_id),

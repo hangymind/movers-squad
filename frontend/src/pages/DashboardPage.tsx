@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Bell, BellOff, CheckCircle2, ChevronDown, Clock3, Gamepad2, Link2, LogOut, Plus, RefreshCw, ShieldCheck, UsersRound, UserCog, XCircle } from 'lucide-react'
+import { Bell, BellOff, CheckCircle2, ChevronDown, Clock3, Link2, LogOut, Plus, RefreshCw, ShieldCheck, UsersRound, UserCog, XCircle } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { Avatar } from '../components/Avatar'
 import { CreateTeamForm } from '../components/CreateTeamForm'
@@ -136,15 +136,15 @@ export function DashboardPage({ user, onUserUpdated, onLogout }: DashboardPagePr
     <div className="dashboard">
       <header className="topbar">
         <div className="topbar-inner">
-          <div className="brand-lockup"><span>Movers Squad</span></div>
-          <nav className="main-nav" aria-label="主导航"><a className="active" href="#teams">组队大厅</a></nav>
+          <div className="brand-lockup"><span>Movers Squad</span><small>伐木.io</small></div>
+          <nav className="main-nav" aria-label="主导航"><a className="active" href="#teams">招募</a></nav>
           <div className="topbar-actions">
             <button className={`notification-button notification-${notificationState}`} type="button" onClick={enableNotifications} disabled={notificationState === 'unsupported'} title="系统通知权限">
               {notificationState === 'granted' ? <Bell size={17} /> : <BellOff size={17} />}
               <span>{notificationState === 'granted' ? '通知已开启' : notificationState === 'denied' ? '通知已拒绝' : notificationState === 'unsupported' ? '不支持通知' : '开启通知'}</span>
             </button>
             <div className="user-menu-wrap">
-              <button className="user-chip user-chip-button" type="button" onClick={() => setUserMenuOpen((open) => !open)} aria-expanded={userMenuOpen}><Avatar user={user} size="sm" /><span>{user.florrId}</span><ChevronDown size={15} /></button>
+              <button className="user-chip user-chip-button" type="button" onClick={() => setUserMenuOpen((open) => !open)} aria-expanded={userMenuOpen}><Avatar user={user} size="sm" /><span className="user-chip-name">{user.florrId}</span><ChevronDown size={15} /></button>
               {userMenuOpen && <div className="user-menu">{user.isAdmin && <button type="button" onClick={() => navigate('/admin')}><ShieldCheck size={16} />管理后台</button>}<button type="button" onClick={() => { setProfileOpen(true); setUserMenuOpen(false) }}><UserCog size={16} />档案设置</button><button type="button" onClick={() => void onLogout()}><LogOut size={16} />退出登录</button></div>}
             </div>
           </div>
@@ -153,21 +153,21 @@ export function DashboardPage({ user, onUserUpdated, onLogout }: DashboardPagePr
 
       <main>
         <section className="dashboard-heading">
-          <div><span className="eyebrow">FLORR.IO SQUAD LOBBY</span><h1>组队大厅</h1><p>查看正在招募的 Florr.io 队伍，选择一支加入。</p></div>
+          <div><h1>MOV组队大厅</h1><p>Any squad?Any hunt?Any bonus?</p></div>
           <button className="button-primary create-button" type="button" onClick={openCreate}><Plus size={19} />发布招募</button>
         </section>
 
         {user.florrBinding?.status === 'pending' && <section className="binding-status-banner" role="status"><span><Clock3 size={19} /></span><div><strong>Florr 绑定申请正在审批</strong><p>审核最长可能需要 2 天，完成后会通知你。</p></div></section>}
 
         <section className="stats-band" aria-label="大厅概况">
-          <div><span className="stat-icon blue"><UsersRound size={19} /></span><span><strong>{teams.length}</strong><small>开放队伍</small></span></div>
-          <div><span className="stat-icon green"><ShieldCheck size={19} /></span><span><strong>{availableSeats}</strong><small>剩余位置</small></span></div>
-          <div><span className="stat-icon gray"><Gamepad2 size={19} /></span><span><strong>{joinedCount}</strong><small>我的队伍</small></span></div>
+          <div><strong>{teams.length}</strong><span>开放队伍</span></div>
+          <div><strong>{availableSeats}</strong><span>剩余位置</span></div>
+          <div><strong>{joinedCount}</strong><span>我的队伍</span></div>
         </section>
 
         <section className="teams-section" id="teams">
           <div className="teams-toolbar">
-            <div><h2>开放招募</h2><span>{visibleTeams.length} 支队伍</span></div>
+            <div><h2>当前招募</h2><span>{visibleTeams.length} 支队伍</span></div>
             <div className="toolbar-actions">
               <button className="icon-button refresh-button" type="button" onClick={() => void loadTeams()} title="刷新队伍"><RefreshCw size={18} /></button>
             </div>

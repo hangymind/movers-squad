@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { Save, UserCog, X } from 'lucide-react'
 import { api, getErrorMessage } from '../lib/api'
+import { isSafeAvatarUrl } from '../lib/safeAvatarUrl'
 import type { User } from '../types'
 import { ErrorDialog } from './ErrorDialog'
 
@@ -13,9 +14,15 @@ export function ProfileSettings({ user, open, onClose, onSaved }: Props) {
   const [saving, setSaving] = useState(false)
   if (!open) return null
   const submit = async (event: FormEvent) => {
-    event.preventDefault(); setError(''); setSaving(true)
+    event.preventDefault(); setError('')
+    const normalizedAvatarUrl = avatarUrl.trim()
+    if (normalizedAvatarUrl && !isSafeAvatarUrl(normalizedAvatarUrl)) {
+      setError('头像链接必须使用 HTTPS，且不能包含登录信息、片段、非标准端口或本机地址。')
+      return
+    }
+    setSaving(true)
     try {
-      const { data } = await api.patch<{ data: User }>('/user', { avatarUrl: avatarUrl || null, level: Number(level) })
+      const { data } = await api.patch<{ data: User }>('/user', { avatarUrl: normalizedAvatarUrl || null, level: Number(level) })
       onSaved(data.data); onClose()
     } catch (requestError) { setError(getErrorMessage(requestError)) } finally { setSaving(false) }
   }
@@ -25,7 +32,7 @@ export function ProfileSettings({ user, open, onClose, onSaved }: Props) {
       <form onSubmit={submit}>
         <label>绑定 Florr ID<input value={user.florrId} readOnly /></label>
         <label>Florr 等级<input type="number" min={1} max={1000} value={level} onChange={(event) => setLevel(event.target.value)} required /></label>
-        <label>头像链接 <span className="optional">选填</span><input type="url" value={avatarUrl} onChange={(event) => setAvatarUrl(event.target.value)} maxLength={2048} placeholder="https://example.com/avatar.jpg" /></label>
+        <label>头像链接 <span className="optional">选填</span><input type="url" inputMode="url" value={avatarUrl} onChange={(event) => setAvatarUrl(event.target.value)} maxLength={2048} placeholder="https://example.com/avatar.jpg" aria-describedby="avatar-url-help" /><small id="avatar-url-help" className="field-help">仅支持安全的 HTTPS 图片外链</small></label>
         <div className="modal-actions"><button type="button" className="button-secondary" onClick={onClose}>取消</button><button type="submit" className="button-primary" disabled={saving}><Save size={17} />{saving ? '保存中...' : '保存设置'}</button></div>
       </form>
     </section>

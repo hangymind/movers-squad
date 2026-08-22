@@ -106,6 +106,49 @@ class AuthTest extends TestCase
         $this->assertGuest();
     }
 
+    public function test_user_can_set_a_safe_https_avatar_url(): void
+    {
+        $user = User::factory()->create();
+
+        $this->actingAs($user)->patchJson('/api/user', [
+            'avatarUrl' => 'https://cdn.example.com/avatars/player.png?size=96&signature=abc123',
+        ])->assertOk()->assertJsonPath(
+            'data.avatarUrl',
+            'https://cdn.example.com/avatars/player.png?size=96&signature=abc123',
+        );
+    }
+
+    public function test_unsafe_avatar_urls_are_rejected(): void
+    {
+        $user = User::factory()->create();
+        $unsafeUrls = [
+            'http://cdn.example.com/avatar.png',
+            'https://user:password@cdn.example.com/avatar.png',
+            'https://cdn.example.com:8443/avatar.png',
+            'https://cdn.example.com/avatar.png#fragment',
+            'https://localhost/avatar.png',
+            'https://avatars.local/avatar.png',
+            'https://127.0.0.1/avatar.png',
+            'https://[::1]/avatar.png',
+            'javascript:alert(1)',
+        ];
+
+        foreach ($unsafeUrls as $unsafeUrl) {
+            $this->actingAs($user)->patchJson('/api/user', ['avatarUrl' => $unsafeUrl])
+                ->assertUnprocessable()
+                ->assertJsonValidationErrors('avatarUrl');
+        }
+    }
+
+    public function test_unsafe_legacy_avatar_url_is_not_serialized(): void
+    {
+        $user = User::factory()->create(['avatar_url' => 'http://127.0.0.1/private.png']);
+
+        $this->actingAs($user)->getJson('/api/user')
+            ->assertOk()
+            ->assertJsonPath('data.avatarUrl', null);
+    }
+
     public function test_invalid_credentials_are_rejected(): void
     {
         User::factory()->create(['florr_id' => 'player-id']);

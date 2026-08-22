@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Http\Resources\UserResource;
 use App\Models\User;
+use App\Rules\SafeAvatarUrl;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -38,7 +39,7 @@ class AuthController extends Controller
     public function updateProfile(Request $request): UserResource
     {
         $data = $request->validate([
-            'avatarUrl' => ['sometimes', 'nullable', 'url:http,https', 'max:2048'],
+            'avatarUrl' => ['sometimes', 'nullable', 'string', 'max:2048', new SafeAvatarUrl],
             'level' => ['sometimes', 'integer', 'min:1', 'max:1000'],
         ]);
         $updates = [];

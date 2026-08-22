@@ -1,29 +1,50 @@
 :root {
-  font-family: MoversUbuntu, ui-sans-serif, system-ui, sans-serif;
-  color: #172033;
-  background: #f6f8fb;
+  font-family: var(--font-body);
+  color: #12213f;
+  background: #eaf1fb;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
-  --blue: #2563eb;
-  --blue-dark: #1d4ed8;
-  --blue-light: #eaf1ff;
-  --text: #172033;
-  --muted: #68738a;
-  --border: #dfe5ee;
+  --blue: #2f6edb;
+  --blue-dark: #2358b3;
+  --blue-light: #e7f0ff;
+  --text: #12213f;
+  --muted: #61708a;
+  --border: #cfdaea;
   --surface: #ffffff;
   --success: #16865d;
   --danger: #c83d4f;
+  --page-bg: #eaf1fb;
+  --auth-paper: #0d2d61;
+  --auth-panel: rgba(248, 251, 255, .76);
+  --auth-rule: rgba(255, 255, 255, .28);
+  --auth-slot: rgba(255, 255, 255, .16);
+  --focus-ring: #4b82df;
+  --ink: #12213f;
+  --ink-soft: #2d3c58;
+  --paper: #eaf1fb;
+  --paper-strong: #ffffff;
+  --line: #ccd8e8;
+  --glass: rgba(255, 255, 255, .7);
+  --glass-strong: rgba(255, 255, 255, .86);
+  --glass-border: rgba(255, 255, 255, .72);
+  --navy: #0d2d61;
+  --navy-deep: #09234d;
+  --blue-soft: #8bb8ff;
+  --success-soft: #55c29b;
+  --font-display: MoversUbuntu, sans-serif;
+  --font-body: "Segoe UI", "Microsoft JhengHei", sans-serif;
   letter-spacing: 0;
 }
 
-@font-face { font-family: MoversUbuntu; src: url('/fonts/ubuntu-B.ttf') format('truetype'); font-weight: 400 900; font-style: normal; font-display: swap; }
+@font-face { font-family: MoversUbuntu; src: url('/fonts/ubuntu-B.ttf') format('truetype'); font-weight: 700; font-style: normal; font-display: swap; }
 * { box-sizing: border-box; user-select: none; }
 input, textarea, [contenteditable="true"] { user-select: text; }
-html { min-width: 320px; background: linear-gradient(135deg,#e0f2fe,#f8fafc 50%,#dcfce7); scroll-behavior: smooth; }
-body { margin: 0; min-width: 320px; min-height: 100vh; background: transparent; }
+html { min-width: 320px; overflow-x: clip; background: var(--page-bg); scroll-behavior: smooth; }
+body { margin: 0; min-width: 320px; min-height: 100vh; overflow-x: clip; background: transparent; }
 button, input, textarea { font: inherit; letter-spacing: 0; }
 button { cursor: pointer; }
 button:disabled { cursor: not-allowed; }
 a { color: inherit; }
 #root { min-height: 100vh; }
+h1, h2, h3, .brand-lockup { font-family: var(--font-display); }

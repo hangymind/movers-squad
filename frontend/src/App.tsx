@@ -6,6 +6,7 @@ import { DashboardPage } from './pages/DashboardPage'
 import { AdminPage } from './pages/AdminPage'
 import { BannedPage } from './pages/BannedPage'
 import { FlorrBindingPage } from './pages/FlorrBindingPage'
+import { AppLoading } from './components/AppLoading'
 import type { User } from './types'
 import './App.css'
 
@@ -34,7 +35,7 @@ function App() {
   }, [navigate])
 
   if (loading) {
-    return <div className="app-loading" role="status"><span className="loading-mark">NAIDA</span><span>正在连接Websocket...</span></div>
+    return <AppLoading />
   }
 
   return (
