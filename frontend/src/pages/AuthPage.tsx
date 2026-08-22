@@ -50,7 +50,7 @@ export function AuthPage({ mode, onAuthenticated }: AuthPageProps) {
 
       <section className="auth-form-side">
         <div className="auth-form-wrap">
-          <nav className="auth-mode-switch" aria-label="账户入口"><Link className={!registering ? 'active' : ''} to="/login">登录</Link><Link className={registering ? 'active' : ''} to="/register">注册</Link></nav>
+          
           <header><h2>{registering ? '创建账户' : '欢迎后背'}</h2><p>{registering ? '使用 Florr ID 登入' : '登录后继续查看队伍和招募。'}</p></header>
           <form className="auth-form" onSubmit={handleSubmit}>
             <label>Florr ID<input value={florrId} onChange={(event) => setFlorrId(event.target.value)} maxLength={64} autoComplete="username" placeholder="输入你的 Florr.io ID" required /></label>
