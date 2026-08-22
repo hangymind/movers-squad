@@ -24,4 +24,15 @@ class BroadcastAuthorizationTest extends TestCase
         $this->assertTrue($callback($owner, $team->id));
         $this->assertFalse($callback($outsider, $team->id));
     }
+
+    public function test_user_review_channel_can_only_be_authorized_by_its_owner(): void
+    {
+        $user = User::factory()->create();
+        $other = User::factory()->create();
+        $callback = Broadcast::connection()->getChannels()->get('user.{userId}');
+
+        $this->assertNotNull($callback);
+        $this->assertTrue($callback($user, $user->id));
+        $this->assertFalse($callback($other, $user->id));
+    }
 }

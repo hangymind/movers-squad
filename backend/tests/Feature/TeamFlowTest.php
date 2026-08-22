@@ -7,6 +7,7 @@ use App\Models\Team;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Event;
+use RuntimeException;
 use Tests\TestCase;
 
 class TeamFlowTest extends TestCase
@@ -63,6 +64,32 @@ class TeamFlowTest extends TestCase
         });
         $this->assertDatabaseHas('team_members', ['team_id' => $team->id, 'user_id' => $owner->id]);
         $this->assertDatabaseHas('team_members', ['team_id' => $team->id, 'user_id' => $joiner->id]);
+    }
+
+    public function test_join_still_succeeds_when_realtime_broadcasting_fails(): void
+    {
+        [$team] = $this->createTeam();
+        $joiner = User::factory()->create();
+        Event::listen(TeamMemberJoined::class, fn () => throw new RuntimeException('Reverb unavailable'));
+
+        $this->actingAs($joiner)->postJson("/api/teams/{$team->id}/join")
+            ->assertOk()
+            ->assertJsonPath('data.memberCount', 2);
+
+        $this->assertDatabaseHas('team_members', ['team_id' => $team->id, 'user_id' => $joiner->id]);
+    }
+
+    public function test_team_list_does_not_expose_private_account_fields(): void
+    {
+        [$team, $owner] = $this->createTeam();
+        $viewer = User::factory()->create();
+
+        $this->actingAs($viewer)->getJson('/api/teams')
+            ->assertOk()
+            ->assertJsonPath('data.0.owner.id', $owner->id)
+            ->assertJsonMissingPath('data.0.owner.banId')
+            ->assertJsonMissingPath('data.0.owner.bannedAt')
+            ->assertJsonMissingPath('data.0.owner.reverbKey');
     }
 
     public function test_duplicate_join_and_fifth_member_are_rejected(): void

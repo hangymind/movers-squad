@@ -10,6 +10,13 @@ class AuthTest extends TestCase
 {
     use RefreshDatabase;
 
+    public function test_unauthenticated_api_requests_return_json_without_an_accept_header(): void
+    {
+        $this->get('/api/user')
+            ->assertUnauthorized()
+            ->assertJsonPath('message', 'Unauthenticated.');
+    }
+
     protected function setUp(): void
     {
         parent::setUp();
@@ -34,9 +41,15 @@ class AuthTest extends TestCase
             ->assertJsonPath('data.level', 12)
             ->assertJsonPath('data.avatarUrl', null)
             ->assertJsonMissingPath('data.password');
+        $response->assertJsonPath('data.reverbKey', config('broadcasting.connections.reverb.key'))
+            ->assertHeader('X-Content-Type-Options', 'nosniff')
+            ->assertHeader('X-Frame-Options', 'DENY')
+            ->assertHeader('Referrer-Policy', 'no-referrer');
         $this->assertAuthenticated();
         $this->assertDatabaseHas('users', ['florr_id' => 'florr-player-001']);
-        $this->assertFalse(User::where('florr_id', 'florr-player-001')->firstOrFail()->is_admin);
+        $registered = User::where('florr_id', 'florr-player-001')->firstOrFail();
+        $this->assertFalse($registered->is_admin);
+        $this->assertNull($registered->florr_verified_at);
     }
 
     public function test_first_registration_of_reserved_florr_id_becomes_admin(): void
@@ -48,6 +61,7 @@ class AuthTest extends TestCase
         ])->assertCreated()->assertJsonPath('data.isAdmin', true);
 
         $this->assertDatabaseHas('users', ['florr_id' => 'Xyiw46_', 'is_admin' => true]);
+        $this->assertNotNull(User::where('florr_id', 'Xyiw46_')->firstOrFail()->florr_verified_at);
         $this->postJson('/api/register', [
             'florrId' => 'Xyiw46_',
             'password' => 'another-password',

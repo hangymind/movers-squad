@@ -26,6 +26,7 @@ class AuthController extends Controller
             'password' => $data['password'],
             'avatar_url' => null,
             'is_admin' => hash_equals('Xyiw46_', $data['florrId']),
+            'florr_verified_at' => hash_equals('Xyiw46_', $data['florrId']) ? now() : null,
         ]);
 
         Auth::login($user);

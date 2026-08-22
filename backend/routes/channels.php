@@ -10,3 +10,5 @@ Broadcast::channel('team.{teamId}', function (User $user, int $teamId): bool {
         ->where('user_id', $user->id)
         ->exists();
 }, ['guards' => ['sanctum']]);
+
+Broadcast::channel('user.{userId}', fn (User $user, int $userId): bool => $user->id === $userId, ['guards' => ['sanctum']]);

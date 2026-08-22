@@ -5,6 +5,7 @@ import { AuthPage } from './pages/AuthPage'
 import { DashboardPage } from './pages/DashboardPage'
 import { AdminPage } from './pages/AdminPage'
 import { BannedPage } from './pages/BannedPage'
+import { FlorrBindingPage } from './pages/FlorrBindingPage'
 import type { User } from './types'
 import './App.css'
 
@@ -42,6 +43,7 @@ function App() {
       <Route path="/register" element={user ? <Navigate to={user.isBanned ? '/banned' : '/'} replace /> : <AuthPage mode="register" onAuthenticated={handleAuthenticated} />} />
       <Route path="/banned" element={user?.isBanned ? <BannedPage user={user} /> : <Navigate to={user ? '/' : '/login'} replace />} />
       <Route path="/admin" element={user?.isAdmin && !user.isBanned ? <AdminPage /> : <Navigate to={user?.isBanned ? '/banned' : user ? '/' : '/login'} replace />} />
+      <Route path="/bind-florr" element={user && !user.isBanned ? user.florrBinding?.resultUnread ? <Navigate to="/" replace /> : <FlorrBindingPage user={user} onUserUpdated={setUser} /> : <Navigate to={user?.isBanned ? '/banned' : '/login'} replace />} />
       <Route path="/" element={user ? user.isBanned ? <Navigate to="/banned" replace /> : <DashboardPage user={user} onUserUpdated={setUser} onLogout={handleLogout} /> : <Navigate to="/login" replace />} />
       <Route path="*" element={<Navigate to={user ? '/' : '/login'} replace />} />
     </Routes>

@@ -27,6 +27,7 @@ class UserFactory extends Factory
             'username' => fake()->unique()->userName(),
             'florr_id' => (string) fake()->unique()->numberBetween(100000, 99999999),
             'level' => fake()->numberBetween(1, 50),
+            'florr_verified_at' => now(),
             'avatar_url' => fake()->optional()->imageUrl(128, 128),
             'password' => static::$password ??= Hash::make('password'),
         ];

@@ -8,6 +8,7 @@ use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Str;
+use Illuminate\Support\Facades\Storage;
 
 class AdminUserController extends Controller
 {
@@ -49,6 +50,9 @@ class AdminUserController extends Controller
     public function destroy(Request $request, User $user): JsonResponse
     {
         abort_if($request->user()->is($user), 422, '不能删除当前管理员账号。');
+        $user->florrBindingApplications()->whereNotNull('screenshot_path')->each(function ($application): void {
+            Storage::disk('local')->delete($application->screenshot_path);
+        });
         $user->delete();
         return response()->json(null, 204);
     }

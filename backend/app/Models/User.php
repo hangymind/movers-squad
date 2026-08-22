@@ -9,6 +9,7 @@ use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Laravel\Sanctum\HasApiTokens;
 
 class User extends Authenticatable
@@ -25,6 +26,7 @@ class User extends Authenticatable
         'username',
         'florr_id',
         'level',
+        'florr_verified_at',
         'avatar_url',
         'password',
         'is_admin',
@@ -53,6 +55,7 @@ class User extends Authenticatable
             'password' => 'hashed',
             'level' => 'integer',
             'is_admin' => 'boolean',
+            'florr_verified_at' => 'datetime',
             'banned_at' => 'datetime',
         ];
     }
@@ -66,5 +69,15 @@ class User extends Authenticatable
     {
         return $this->belongsToMany(Team::class, 'team_members')
             ->withPivot('joined_at');
+    }
+
+    public function florrBindingApplications(): HasMany
+    {
+        return $this->hasMany(FlorrBindingApplication::class);
+    }
+
+    public function latestFlorrBinding(): HasOne
+    {
+        return $this->hasOne(FlorrBindingApplication::class)->latestOfMany();
     }
 }

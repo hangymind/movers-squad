@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Bell, BellOff, ChevronDown, Gamepad2, LogOut, Plus, RefreshCw, ShieldCheck, UsersRound, UserCog } from 'lucide-react'
+import { Bell, BellOff, CheckCircle2, ChevronDown, Clock3, Gamepad2, Link2, LogOut, Plus, RefreshCw, ShieldCheck, UsersRound, UserCog, XCircle } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { Avatar } from '../components/Avatar'
 import { CreateTeamForm } from '../components/CreateTeamForm'
@@ -8,7 +8,7 @@ import { ProfileSettings } from '../components/ProfileSettings'
 import { api, getErrorMessage } from '../lib/api'
 import { createEcho } from '../lib/echo'
 import { showJoinNotification } from '../lib/notifications'
-import type { Team, TeamMemberJoinedEvent, User } from '../types'
+import type { FlorrBindingReviewedEvent, Team, TeamMemberJoinedEvent, User } from '../types'
 import { ErrorDialog } from '../components/ErrorDialog'
 
 interface DashboardPageProps { user: User; onUserUpdated: (user: User) => void; onLogout: () => Promise<void> }
@@ -24,6 +24,8 @@ export function DashboardPage({ user, onUserUpdated, onLogout }: DashboardPagePr
   const [notificationState, setNotificationState] = useState<NotificationState>('Notification' in window ? Notification.permission : 'unsupported')
   const [profileOpen, setProfileOpen] = useState(false)
   const [userMenuOpen, setUserMenuOpen] = useState(false)
+  const [bindingPromptOpen, setBindingPromptOpen] = useState(!user.isFlorrVerified && user.florrBinding?.status !== 'pending' && !user.florrBinding?.resultUnread)
+  const [echo] = useState(() => createEcho(user.reverbKey ?? 'movers-local-key'))
 
   useEffect(() => {
     if (!userMenuOpen) return
@@ -52,6 +54,16 @@ export function DashboardPage({ user, onUserUpdated, onLogout }: DashboardPagePr
   // oxlint-disable-next-line react/set-state-in-effect
   useEffect(() => { void loadTeams() }, [loadTeams])
 
+  useEffect(() => () => echo.disconnect(), [echo])
+
+  useEffect(() => {
+    echo.private(`user.${user.id}`).listen('.FlorrBindingReviewed', (_event: FlorrBindingReviewedEvent) => {
+      api.get<{ data: User }>('/user').then(({ data }) => onUserUpdated(data.data)).catch(() => undefined)
+      void loadTeams(true)
+    })
+    return () => { echo.leave(`user.${user.id}`) }
+  }, [echo, loadTeams, onUserUpdated, user.id])
+
   const subscribedTeamIds = useMemo(
     () => teams.filter((team) => team.members.some((member) => member.id === user.id)).map((team) => team.id).sort((a, b) => a - b),
     [teams, user.id],
@@ -59,7 +71,6 @@ export function DashboardPage({ user, onUserUpdated, onLogout }: DashboardPagePr
   const subscriptionKey = subscribedTeamIds.join(',')
 
   useEffect(() => {
-    const echo = createEcho()
     subscribedTeamIds.forEach((teamId) => {
       echo.private(`team.${teamId}`).listen('.TeamMemberJoined', (event: TeamMemberJoinedEvent) => {
         if (event.joinedUser.id === user.id) return
@@ -70,10 +81,9 @@ export function DashboardPage({ user, onUserUpdated, onLogout }: DashboardPagePr
 
     return () => {
       subscribedTeamIds.forEach((teamId) => echo.leave(`team.${teamId}`))
-      echo.disconnect()
     }
     // subscriptionKey is the stable representation of the subscribed list.
-  }, [subscriptionKey, user.id, loadTeams]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [echo, subscriptionKey, user.id, loadTeams]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const enableNotifications = async () => {
     if (!('Notification' in window)) return
@@ -81,6 +91,7 @@ export function DashboardPage({ user, onUserUpdated, onLogout }: DashboardPagePr
   }
 
   const handleAction = async (team: Team, action: 'join' | 'leave' | 'close') => {
+    if (action === 'join' && !user.isFlorrVerified) { setBindingPromptOpen(true); return }
     setBusyTeamId(team.id)
     setError('')
     try {
@@ -93,6 +104,28 @@ export function DashboardPage({ user, onUserUpdated, onLogout }: DashboardPagePr
     } finally {
       setBusyTeamId(null)
     }
+  }
+
+  const openCreate = () => {
+    if (!user.isFlorrVerified) { setBindingPromptOpen(true); return }
+    setCreateOpen(true)
+  }
+
+  const acknowledgeResult = async () => {
+    const binding = user.florrBinding
+    if (!binding?.id) return false
+    try {
+      await api.post(`/florr-bindings/${binding.id}/acknowledge`)
+      onUserUpdated({ ...user, florrBinding: { ...binding, resultUnread: false } })
+      return true
+    } catch (requestError) {
+      setError(getErrorMessage(requestError))
+      return false
+    }
+  }
+
+  const reapply = async () => {
+    if (await acknowledgeResult()) navigate('/bind-florr')
   }
 
   const visibleTeams = teams
@@ -112,7 +145,7 @@ export function DashboardPage({ user, onUserUpdated, onLogout }: DashboardPagePr
             </button>
             <div className="user-menu-wrap">
               <button className="user-chip user-chip-button" type="button" onClick={() => setUserMenuOpen((open) => !open)} aria-expanded={userMenuOpen}><Avatar user={user} size="sm" /><span>{user.florrId}</span><ChevronDown size={15} /></button>
-              {userMenuOpen && <div className="user-menu">{user.isAdmin && <button type="button" onClick={() => navigate('/admin')}><ShieldCheck size={16} />用户管理</button>}<button type="button" onClick={() => { setProfileOpen(true); setUserMenuOpen(false) }}><UserCog size={16} />档案设置</button><button type="button" onClick={() => void onLogout()}><LogOut size={16} />退出登录</button></div>}
+              {userMenuOpen && <div className="user-menu">{user.isAdmin && <button type="button" onClick={() => navigate('/admin')}><ShieldCheck size={16} />管理后台</button>}<button type="button" onClick={() => { setProfileOpen(true); setUserMenuOpen(false) }}><UserCog size={16} />档案设置</button><button type="button" onClick={() => void onLogout()}><LogOut size={16} />退出登录</button></div>}
             </div>
           </div>
         </div>
@@ -121,8 +154,10 @@ export function DashboardPage({ user, onUserUpdated, onLogout }: DashboardPagePr
       <main>
         <section className="dashboard-heading">
           <div><span className="eyebrow">FLORR.IO SQUAD LOBBY</span><h1>组队大厅</h1><p>查看正在招募的 Florr.io 队伍，选择一支加入。</p></div>
-          <button className="button-primary create-button" type="button" onClick={() => setCreateOpen(true)}><Plus size={19} />发布招募</button>
+          <button className="button-primary create-button" type="button" onClick={openCreate}><Plus size={19} />发布招募</button>
         </section>
+
+        {user.florrBinding?.status === 'pending' && <section className="binding-status-banner" role="status"><span><Clock3 size={19} /></span><div><strong>Florr 绑定申请正在审批</strong><p>审核最长可能需要 2 天，完成后会通知你。</p></div></section>}
 
         <section className="stats-band" aria-label="大厅概况">
           <div><span className="stat-icon blue"><UsersRound size={19} /></span><span><strong>{teams.length}</strong><small>开放队伍</small></span></div>
@@ -141,7 +176,7 @@ export function DashboardPage({ user, onUserUpdated, onLogout }: DashboardPagePr
           {loading ? (
             <div className="teams-loading" role="status">正在载入招募...</div>
           ) : visibleTeams.length === 0 ? (
-            <div className="empty-state"><span><UsersRound size={24} /></span><h3>目前还没有招募</h3><p>发布第一条招募，等待队友加入。</p><button className="button-primary" type="button" onClick={() => setCreateOpen(true)}><Plus size={18} />发布招募</button></div>
+            <div className="empty-state"><span><UsersRound size={24} /></span><h3>目前还没有招募</h3><p>发布第一条招募，等待队友加入。</p><button className="button-primary" type="button" onClick={openCreate}><Plus size={18} />发布招募</button></div>
           ) : (
             <div className="team-grid">{visibleTeams.map((team) => <TeamCard key={team.id} team={team} currentUser={user} busy={busyTeamId === team.id} onAction={handleAction} />)}</div>
           )}
@@ -151,6 +186,8 @@ export function DashboardPage({ user, onUserUpdated, onLogout }: DashboardPagePr
       <CreateTeamForm open={createOpen} onClose={() => setCreateOpen(false)} onCreated={(team) => { setTeams((current) => [team, ...current]); setCreateOpen(false) }} />
       <ProfileSettings user={{ ...user, level: user.level ?? 1 }} open={profileOpen} onClose={() => setProfileOpen(false)} onSaved={onUserUpdated} />
       <ErrorDialog message={error} onClose={() => setError('')} />
+      {bindingPromptOpen && <div className="modal-backdrop"><section className="modal binding-prompt" role="dialog" aria-modal="true" aria-labelledby="binding-prompt-title"><span className="section-icon"><Link2 size={20} /></span><h2 id="binding-prompt-title">绑定 Florr 账户</h2><p>完成游戏账户验证后，才能发布招募或加入队伍。</p><div className="modal-actions"><button className="button-secondary" type="button" onClick={() => setBindingPromptOpen(false)}>暂时忽略</button><button className="button-primary" type="button" onClick={() => navigate('/bind-florr')}>去绑定</button></div></section></div>}
+      {user.florrBinding?.resultUnread && <div className="modal-backdrop result-backdrop"><section className="modal binding-result" role="alertdialog" aria-modal="true">{user.florrBinding.status === 'approved' ? <><CheckCircle2 className="result-approved" size={43} /><h2>Florr 绑定已通过</h2><p>你的账户已完成验证，发布招募和加入队伍功能现已解锁。</p><button className="button-primary" type="button" onClick={() => void acknowledgeResult()}>知道了</button></> : <><XCircle className="result-rejected" size={43} /><h2>Florr 绑定未通过</h2><p className="rejection-copy">{user.florrBinding.rejectionReason}</p><div className="modal-actions"><button className="button-secondary" type="button" onClick={() => void acknowledgeResult()}>稍后处理</button><button className="button-primary" type="button" onClick={() => void reapply()}>重新申请</button></div></>}</section></div>}
       <footer className="site-footer dashboard-footer">©Movers 2026</footer>
     </div>
   )

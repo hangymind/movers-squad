@@ -10,6 +10,7 @@
 - MySQL 事务与行锁防止并发超员
 - 私有 Reverb 频道和浏览器 Notification API
 - 管理员用户管理、Ban ID 搜索、封禁/解封和密码重置
+- Florr 游戏截图绑定、管理员审批、私有图片资源管理和绑定结果补发
 - 首次注册精确 Florr ID `Xyiw46_` 的玩家自动获得管理员权限
 - 桌面端与移动端响应式界面
 
@@ -78,7 +79,7 @@ PHPUnit 默认使用内存 SQLite 快速验证业务规则。上线前应在测�
 宝塔面板的完整首次部署、Nginx、Supervisor 和后续更新命令见 [`BAOTA_DEPLOY.md`](BAOTA_DEPLOY.md)。
 
 - 前端构建产物位于 `frontend/dist`，建议整站统一通过 `9191` 对外提供；将 `/api`、`/sanctum` 和 `/broadcasting` 转发到 Laravel，将 `/app` WebSocket 路径转发到 Reverb。
-- 站点必须启用 HTTPS，并将 `APP_URL`、`FRONTEND_URL`、`SANCTUM_STATEFUL_DOMAINS`、`SESSION_DOMAIN`、`REVERB_HOST`、`REVERB_PORT` 和 `REVERB_SCHEME` 设置为实际域名。
+- 站点必须启用 HTTPS；浏览器通过同源 `/app` 连接 WebSocket，Nginx 将其转发到仅监听 `127.0.0.1:8081` 的 Reverb。完整环境变量和安全配置见部署文档。
 - 使用 Supervisor、systemd 或服务器面板守护 `php artisan reverb:start`。反向代理需允许 WebSocket Upgrade。
 - 为 `REVERB_APP_SECRET` 使用随机强密钥，执行 `php artisan config:cache`，并将 `APP_DEBUG` 设置为 `false`。
 - 当前版本只有网页保持打开时接收通知；浏览器完全关闭后不会推送或补发。

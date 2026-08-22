@@ -12,6 +12,7 @@ use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Support\Facades\DB;
 use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
 use Symfony\Component\HttpKernel\Exception\UnprocessableEntityHttpException;
+use Throwable;
 
 class TeamController extends Controller
 {
@@ -19,7 +20,7 @@ class TeamController extends Controller
     {
         $teams = Team::query()
             ->whereNull('closed_at')
-            ->with(['owner:id,username,florr_id,level,avatar_url', 'members:id,username,florr_id,level,avatar_url'])
+            ->with(['owner:id,username,florr_id,level,avatar_url,florr_verified_at', 'members:id,username,florr_id,level,avatar_url,florr_verified_at'])
             ->withCount('members')
             ->latest()
             ->get();
@@ -85,7 +86,12 @@ class TeamController extends Controller
             return $team;
         });
 
-        TeamMemberJoined::dispatch($team, $user);
+        try {
+            TeamMemberJoined::dispatch($team, $user);
+        } catch (Throwable $exception) {
+            // Joining is committed independently; persisted state remains the source of truth.
+            report($exception);
+        }
 
         return new TeamResource($this->loadTeam($team));
     }
@@ -131,7 +137,7 @@ class TeamController extends Controller
     private function loadTeam(Team $team): Team
     {
         return $team->fresh()
-            ->load(['owner:id,username,florr_id,level,avatar_url', 'members:id,username,florr_id,level,avatar_url'])
+            ->load(['owner:id,username,florr_id,level,avatar_url,florr_verified_at', 'members:id,username,florr_id,level,avatar_url,florr_verified_at'])
             ->loadCount('members');
     }
 }
