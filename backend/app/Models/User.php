@@ -84,6 +84,11 @@ class User extends Authenticatable
         return $this->hasMany(FlorrBindingApplication::class);
     }
 
+    public function publicMessages(): HasMany
+    {
+        return $this->hasMany(PublicMessage::class);
+    }
+
     public function latestFlorrBinding(): HasOne
     {
         return $this->hasOne(FlorrBindingApplication::class)->latestOfMany();

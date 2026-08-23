@@ -1,13 +1,15 @@
 <?php
 
+use App\Http\Controllers\AdminFlorrBindingController;
+use App\Http\Controllers\AdminTeamController;
+use App\Http\Controllers\AdminUserController;
 use App\Http\Controllers\AuthController;
+use App\Http\Controllers\FlorrBindingController;
+use App\Http\Controllers\PublicMessageController;
+use App\Http\Controllers\PublicVoiceController;
 use App\Http\Controllers\TeamController;
 use App\Http\Controllers\TeamMessageController;
 use App\Http\Controllers\TeamVoiceController;
-use App\Http\Controllers\AdminUserController;
-use App\Http\Controllers\AdminFlorrBindingController;
-use App\Http\Controllers\AdminTeamController;
-use App\Http\Controllers\FlorrBindingController;
 use App\Http\Resources\UserResource;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
@@ -24,6 +26,10 @@ Route::middleware('auth:sanctum')->group(function (): void {
     Route::post('/florr-bindings/{application}/acknowledge', [FlorrBindingController::class, 'acknowledge'])->middleware('throttle:write');
 
     Route::middleware('not_banned')->group(function (): void {
+        Route::get('/public-room/messages', [PublicMessageController::class, 'index'])->middleware('throttle:read');
+        Route::post('/public-room/messages', [PublicMessageController::class, 'store'])->middleware('throttle:chat');
+        Route::post('/public-room/voice-token', [PublicVoiceController::class, 'token'])->middleware('throttle:voice');
+        Route::get('/public-room/voice-participants', [PublicVoiceController::class, 'participants'])->middleware('throttle:read');
         Route::get('/teams', [TeamController::class, 'index'])->middleware('throttle:read');
         Route::get('/teams/current', [TeamController::class, 'current'])->middleware('throttle:read');
         Route::get('/teams/{teamId}', [TeamController::class, 'show'])->middleware('throttle:read');

@@ -12,6 +12,7 @@ import type { User } from './types'
 import './App.css'
 
 const TeamRoomPage = lazy(() => import('./pages/TeamRoomPage').then((module) => ({ default: module.TeamRoomPage })))
+const PublicRoomPage = lazy(() => import('./pages/PublicRoomPage').then((module) => ({ default: module.PublicRoomPage })))
 
 function App() {
   const [user, setUser] = useState<User | null>(null)
@@ -49,6 +50,7 @@ function App() {
       <Route path="/admin" element={user?.isAdmin && !user.isBanned ? <AdminPage /> : <Navigate to={user?.isBanned ? '/banned' : user ? '/' : '/login'} replace />} />
       <Route path="/bind-florr" element={user && !user.isBanned ? user.florrBinding?.resultUnread ? <Navigate to="/" replace /> : <FlorrBindingPage user={user} onUserUpdated={setUser} /> : <Navigate to={user?.isBanned ? '/banned' : '/login'} replace />} />
       <Route path="/teams/:teamId/room" element={user && !user.isBanned ? <Suspense fallback={<AppLoading />}><TeamRoomPage user={user} onLogout={handleLogout} /></Suspense> : <Navigate to={user?.isBanned ? '/banned' : '/login'} replace />} />
+      <Route path="/public-room" element={user && !user.isBanned ? <Suspense fallback={<AppLoading />}><PublicRoomPage user={user} onLogout={handleLogout} /></Suspense> : <Navigate to={user?.isBanned ? '/banned' : '/login'} replace />} />
       <Route path="/" element={user ? user.isBanned ? <Navigate to="/banned" replace /> : <DashboardPage user={user} onUserUpdated={setUser} onLogout={handleLogout} /> : <Navigate to="/login" replace />} />
       <Route path="*" element={<Navigate to={user ? '/' : '/login'} replace />} />
     </Routes>

@@ -35,4 +35,15 @@ class BroadcastAuthorizationTest extends TestCase
         $this->assertTrue($callback($user, $user->id));
         $this->assertFalse($callback($other, $user->id));
     }
+
+    public function test_public_room_channel_allows_only_non_banned_authenticated_users(): void
+    {
+        $user = User::factory()->create();
+        $banned = User::factory()->create(['banned_at' => now(), 'ban_id' => 'ban-channel']);
+        $callback = Broadcast::connection()->getChannels()->get('public-room');
+
+        $this->assertNotNull($callback);
+        $this->assertTrue($callback($user));
+        $this->assertFalse($callback($banned));
+    }
 }

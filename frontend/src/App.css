@@ -238,6 +238,11 @@ input:focus-visible, textarea:focus-visible { outline: 2px solid var(--focus-rin
 .room-roster article strong { overflow-wrap: anywhere; font-size: 12px; }
 .room-roster article small { display: flex; align-items: center; gap: 4px; color: var(--muted); font-size: 9px; }
 .room-sidebar > button { margin-top: auto; }
+.public-roster-state { margin: 12px 0 0; padding: 14px 0; color: var(--muted); font-size: 11px; line-height: 1.6; border-top: 1px solid #dde5ef; }
+.room-main-nav { height: 64px; }
+.room-main-nav a { color: #a9b8ce; }
+.room-main-nav a.active { color: white; }
+.room-main-nav a.active::after { background: #78aef7; }
 .room-exit { width: 100%; }
 .room-conversation { min-height: calc(100vh - 64px); display: grid; grid-template-rows: auto minmax(260px, 1fr) auto; background: white; }
 .conversation-header { min-height: 76px; padding: 17px 22px; display: flex; align-items: center; justify-content: space-between; gap: 15px; border-bottom: 1px solid var(--line); }
@@ -441,7 +446,8 @@ input:focus-visible, textarea:focus-visible { outline: 2px solid var(--focus-rin
   .auth-form-wrap h2 { font-size: 27px; }
   .topbar { height: 62px; }
   .topbar-inner, .dashboard main { width: min(100% - 28px, 1180px); }
-  .topbar .brand-lockup small, .main-nav, .notification-button span, .user-chip-name { display: none; }
+  .topbar .brand-lockup small, .notification-button span, .user-chip-name { display: none; }
+  .main-nav { margin-left: 12px; }
   .topbar-actions { gap: 5px; }
   .notification-button { width: 36px; padding: 0; justify-content: center; }
   .user-chip { padding-left: 7px; }
@@ -488,6 +494,8 @@ input:focus-visible, textarea:focus-visible { outline: 2px solid var(--focus-rin
   .room-topbar-actions { gap: 8px; }
   .room-topbar-actions .button-secondary { width: 36px; min-height: 36px; padding: 0; font-size: 0; }
   .room-status { font-size: 9px; }
+  .room-topbar .main-nav { height: 60px; }
+  .public-back-button { display: none; }
   .room-shell { min-height: calc(100vh - 60px); display: block; border: 0; }
   .room-sidebar { padding: 20px 16px; border-right: 0; border-bottom: 1px solid var(--line); }
   .room-sidebar h1 { font-size: 20px; }
@@ -503,6 +511,11 @@ input:focus-visible, textarea:focus-visible { outline: 2px solid var(--focus-rin
   .voice-panel { min-height: 240px; padding: 20px 16px; display: flex; }
   .voice-participants { width: 100%; margin: 16px 0; grid-template-columns: 1fr 1fr; }
   .voice-controls { width: 100%; margin-top: auto; }
+}
+
+@media (max-width: 520px) {
+  .topbar .brand-lockup, .public-room-page .room-topbar .brand-lockup { display: none; }
+  .topbar .main-nav, .public-room-page .room-topbar .main-nav { margin-left: 0; }
 }
 
 @keyframes drawer-slide-up-in { from { opacity: 0; transform: translateY(28px); } to { opacity: 1; transform: translateY(0); } }

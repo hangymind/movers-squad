@@ -108,6 +108,25 @@ export interface TeamMessage {
 
 export interface TeamMessageCreatedEvent { message: TeamMessage }
 
+export interface PublicMessage {
+  id: number
+  sender: User
+  body: string
+  createdAt: string
+}
+
+export interface PublicMessageCreatedEvent { message: PublicMessage }
+
+export interface PublicMessagePage {
+  data: PublicMessage[]
+  meta: { hasMore: boolean; nextBefore: number | null }
+}
+
+export interface VoiceParticipantPage {
+  data: User[]
+  meta: { count: number; available: boolean }
+}
+
 export interface MessagePage {
   data: TeamMessage[]
   meta: { hasMore: boolean; nextBefore: number | null; unreadCount: number }
