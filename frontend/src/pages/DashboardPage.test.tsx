@@ -19,8 +19,8 @@ vi.mock('../lib/api', () => ({
 vi.mock('../lib/echo', () => ({
   createEcho: () => ({ private: () => mocks.channel, leave: vi.fn(), disconnect: vi.fn() }),
   keepEchoConnection: () => () => undefined,
-  observeEchoConnection: (_echo: unknown, listener: (connected: boolean) => void) => {
-    listener(true)
+  observeEchoConnection: (_echo: unknown, listener: (status: string) => void) => {
+    listener('connected')
     return () => undefined
   },
 }))
@@ -55,6 +55,7 @@ describe('DashboardPage recruitment replacement', () => {
   afterEach(cleanup)
 
   beforeEach(() => {
+    sessionStorage.clear()
     vi.mocked(api.get).mockReset()
     vi.mocked(api.post).mockReset()
     vi.mocked(showJoinNotification).mockReset()
@@ -164,5 +165,19 @@ describe('DashboardPage recruitment replacement', () => {
 
     await waitFor(() => expect(showMemberLeftNotification).toHaveBeenCalledWith(expect.objectContaining({ user: departed }), expect.any(Object)))
     expect(showTeamCreatedNotification).toHaveBeenCalledWith(expect.objectContaining({ teamId: 10 }), expect.any(Object))
+  })
+
+  it('queues a full room in the background and enters it after visibility returns', async () => {
+    const assembledTeam = { ...currentTeam, members: [owner, { id: 2, florrId: 'member', avatarUrl: null }], memberCount: 2, maxMembers: 2, isFull: true, isAssembled: true, assembledAt: '2026-08-23T03:00:00Z' }
+    Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true })
+    vi.mocked(api.get).mockImplementation((url) => Promise.resolve({ data: url === '/teams/current' ? { data: assembledTeam } : { data: [] } }))
+
+    render(<MemoryRouter><DashboardPage user={owner} onUserUpdated={vi.fn()} onLogout={vi.fn()} /></MemoryRouter>)
+
+    expect(await screen.findByText(/你正在 Florr.io 房间中/)).toBeInTheDocument()
+    expect(sessionStorage.getItem('movers.pendingRoomTeamId')).toBe(String(assembledTeam.id))
+    Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true })
+    act(() => document.dispatchEvent(new Event('visibilitychange')))
+    expect(sessionStorage.getItem('movers.pendingRoomTeamId')).toBeNull()
   })
 })

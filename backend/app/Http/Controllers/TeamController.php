@@ -71,7 +71,7 @@ class TeamController extends Controller
         ]);
         $excludedIds = collect($data['excludedFlorrIds'] ?? [])->map(fn (string $id) => trim($id))->filter()->unique()->values()->all();
 
-        [$team, $replacedTeams, $leftTeams] = DB::transaction(function () use ($request, $data, $excludedIds): array {
+        [$team, $replacedTeams, $leftTeams, $dissolvedTeams] = DB::transaction(function () use ($request, $data, $excludedIds): array {
             $user = User::query()->lockForUpdate()->findOrFail($request->user()->id);
             $activeTeams = Team::query()
                 ->whereNull('closed_at')
@@ -82,6 +82,7 @@ class TeamController extends Controller
 
             $replacedTeams = collect();
             $leftTeams = collect();
+            $dissolvedTeams = collect();
             if ($activeTeams->isNotEmpty()) {
                 if (! ($data['replaceCurrentTeam'] ?? false)) {
                     throw new ConflictHttpException('你已经加入了一支未关闭的队伍。');
@@ -96,6 +97,10 @@ class TeamController extends Controller
                     } else {
                         $activeTeam->members()->detach($user->id);
                         $leftTeams->push($activeTeam);
+                        if ($activeTeam->members()->count() <= 1) {
+                            $activeTeam->update(['closed_at' => now()]);
+                            $dissolvedTeams->push($activeTeam);
+                        }
                     }
                 }
             }
@@ -110,7 +115,7 @@ class TeamController extends Controller
             ]);
             $team->members()->attach($user->id, ['joined_at' => now()]);
 
-            return [$team, $replacedTeams, $leftTeams];
+            return [$team, $replacedTeams, $leftTeams, $dissolvedTeams];
         });
 
         foreach ($replacedTeams as $replacedTeam) {
@@ -118,6 +123,16 @@ class TeamController extends Controller
         }
         foreach ($leftTeams as $leftTeam) {
             $this->broadcastSafely(new TeamMemberLeft($leftTeam, $request->user()));
+        }
+        foreach ($dissolvedTeams as $dissolvedTeam) {
+            $this->broadcastSafely(new TeamClosed($dissolvedTeam));
+            if ($dissolvedTeam->assembled_at !== null) {
+                try {
+                    $this->liveKit->deleteRoom($dissolvedTeam->id);
+                } catch (Throwable $exception) {
+                    report($exception);
+                }
+            }
         }
         $this->broadcastSafely(new TeamCreated($team));
 
@@ -186,7 +201,7 @@ class TeamController extends Controller
 
     public function leave(Request $request, int $teamId): JsonResponse
     {
-        $team = DB::transaction(function () use ($request, $teamId): Team {
+        [$team, $dissolved] = DB::transaction(function () use ($request, $teamId): array {
             $team = Team::query()->lockForUpdate()->findOrFail($teamId);
 
             if ($team->owner_id === $request->user()->id) {
@@ -198,8 +213,12 @@ class TeamController extends Controller
             }
 
             $team->members()->detach($request->user()->id);
+            $dissolved = $team->members()->count() <= 1;
+            if ($dissolved) {
+                $team->update(['closed_at' => now()]);
+            }
 
-            return $team;
+            return [$team, $dissolved];
         });
 
         try {
@@ -207,9 +226,16 @@ class TeamController extends Controller
         } catch (Throwable $exception) {
             report($exception);
         }
+        if ($dissolved) {
+            $this->broadcastSafely(new TeamClosed($team));
+        }
         if ($team->assembled_at !== null) {
             try {
-                $this->liveKit->removeParticipant($team->id, $request->user()->id);
+                if ($dissolved) {
+                    $this->liveKit->deleteRoom($team->id);
+                } else {
+                    $this->liveKit->removeParticipant($team->id, $request->user()->id);
+                }
             } catch (Throwable $exception) {
                 report($exception);
             }

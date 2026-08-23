@@ -7,7 +7,7 @@ import { TeamCard } from '../components/TeamCard'
 import { TeamDetailsDrawer } from '../components/TeamDetailsDrawer'
 import { ProfileSettings } from '../components/ProfileSettings'
 import { api, getErrorMessage } from '../lib/api'
-import { createEcho, keepEchoConnection, observeEchoConnection } from '../lib/echo'
+import { createEcho, keepEchoConnection, observeEchoConnection, type EchoConnectionStatus } from '../lib/echo'
 import { requestNotificationPermission, showJoinNotification, showMemberLeftNotification, showTeamAssembledNotification, showTeamCreatedNotification } from '../lib/notifications'
 import { NotificationSettingsPanel } from '../components/NotificationSettingsPanel'
 import { parseTeamListResponse } from '../lib/teamListResponse'
@@ -17,6 +17,7 @@ import { ErrorDialog } from '../components/ErrorDialog'
 interface DashboardPageProps { user: User; onUserUpdated: (user: User) => void; onLogout: () => Promise<void> }
 type NotificationState = 'unsupported' | NotificationPermission
 const fallbackNotificationSettings = { showJoinNotifications: true, showTeamCreatedNotifications: true, showMemberLeftNotifications: true, notificationSoundEnabled: true }
+const pendingRoomStorageKey = 'movers.pendingRoomTeamId'
 
 export function DashboardPage({ user, onUserUpdated, onLogout }: DashboardPageProps) {
   const navigate = useNavigate()
@@ -36,7 +37,7 @@ export function DashboardPage({ user, onUserUpdated, onLogout }: DashboardPagePr
   const [userMenuOpen, setUserMenuOpen] = useState(false)
   const [bindingPromptOpen, setBindingPromptOpen] = useState(!user.isFlorrVerified && user.florrBinding?.status !== 'pending' && !user.florrBinding?.resultUnread)
   const [echo] = useState(() => createEcho(user.reverbKey ?? 'movers-local-key'))
-  const [realtimeConnected, setRealtimeConnected] = useState(false)
+  const [realtimeStatus, setRealtimeStatus] = useState<EchoConnectionStatus>('reconnecting')
   const notificationSettings = useMemo(() => user.notificationSettings ? { ...fallbackNotificationSettings, ...user.notificationSettings } : fallbackNotificationSettings, [user.notificationSettings])
   const teamsRef = useRef<Team[]>([])
   const teamsRequestRef = useRef(0)
@@ -67,6 +68,28 @@ export function DashboardPage({ user, onUserUpdated, onLogout }: DashboardPagePr
     notificationKeysRef.current.set(key, now)
     notify()
   }, [])
+
+  const stayInLobby = new URLSearchParams(location.search).has('room')
+  const queueOrEnterRoom = useCallback((team: Team) => {
+    setCurrentRoomTeam(team)
+    if (stayInLobby) {
+      sessionStorage.removeItem(pendingRoomStorageKey)
+      return
+    }
+    sessionStorage.setItem(pendingRoomStorageKey, String(team.id))
+    if (document.visibilityState === 'hidden') return
+    sessionStorage.removeItem(pendingRoomStorageKey)
+    navigate(`/teams/${team.id}/room`)
+  }, [navigate, stayInLobby])
+
+  const enterPendingRoom = useCallback(() => {
+    if (stayInLobby || document.visibilityState === 'hidden') return false
+    const teamId = Number(sessionStorage.getItem(pendingRoomStorageKey))
+    if (!Number.isInteger(teamId) || teamId < 1) return false
+    sessionStorage.removeItem(pendingRoomStorageKey)
+    navigate(`/teams/${teamId}/room`)
+    return true
+  }, [navigate, stayInLobby])
 
   useEffect(() => {
     if (!userMenuOpen) return
@@ -130,16 +153,12 @@ export function DashboardPage({ user, onUserUpdated, onLogout }: DashboardPagePr
   const checkCurrentTeam = useCallback(async () => {
     const { data } = await api.get<{ data: Team | null }>('/teams/current')
     const team = data.data
-    if (!team?.isAssembled) return false
-    if (new URLSearchParams(location.search).has('room')) {
-      setCurrentRoomTeam(team)
-      return false
-    }
+    if (!team?.isAssembled) { setCurrentRoomTeam(null); return false }
     const assembledAt = team.assembledAt ?? new Date().toISOString()
     notifyOnce(`assembled:${team.id}`, () => showTeamAssembledNotification({ team: { id: team.id, gameName: team.gameName }, assembledAt }, notificationSettings))
-    navigate(`/teams/${team.id}/room`, { replace: true })
-    return true
-  }, [location.search, navigate, notificationSettings, notifyOnce])
+    queueOrEnterRoom(team)
+    return document.visibilityState !== 'hidden' && !stayInLobby
+  }, [notificationSettings, notifyOnce, queueOrEnterRoom, stayInLobby])
 
   const synchronize = useCallback(async () => {
     if (syncInFlightRef.current) return
@@ -160,7 +179,7 @@ export function DashboardPage({ user, onUserUpdated, onLogout }: DashboardPagePr
 
   useEffect(() => () => echo.disconnect(), [echo])
 
-  useEffect(() => observeEchoConnection(echo, setRealtimeConnected), [echo])
+  useEffect(() => observeEchoConnection(echo, setRealtimeStatus), [echo])
   useEffect(() => keepEchoConnection(echo), [echo])
 
   useEffect(() => {
@@ -183,6 +202,7 @@ export function DashboardPage({ user, onUserUpdated, onLogout }: DashboardPagePr
       }
       worker?.postMessage({ type: 'stop' })
       stopFallback()
+      if (enterPendingRoom()) return
       void synchronize()
     }
     if ('Worker' in window) {
@@ -199,14 +219,14 @@ export function DashboardPage({ user, onUserUpdated, onLogout }: DashboardPagePr
       document.removeEventListener('visibilitychange', handleVisibility)
       window.removeEventListener('focus', handleVisibility)
     }
-  }, [synchronize])
+  }, [enterPendingRoom, synchronize])
 
   useEffect(() => {
     const interval = window.setInterval(() => {
       if (document.visibilityState === 'visible') void synchronize()
-    }, realtimeConnected ? 30_000 : 5_000)
+    }, realtimeStatus === 'connected' ? 30_000 : 5_000)
     return () => window.clearInterval(interval)
-  }, [realtimeConnected, synchronize])
+  }, [realtimeStatus, synchronize])
 
   useEffect(() => {
     echo.private(`user.${user.id}`).listen('.FlorrBindingReviewed', (_event: FlorrBindingReviewedEvent) => {
@@ -236,7 +256,7 @@ export function DashboardPage({ user, onUserUpdated, onLogout }: DashboardPagePr
       if (event.isAssembled && isCurrentMember) {
         const assembledEvent: TeamAssembledEvent = { team: event.team, assembledAt: event.joinedAt }
         notifyOnce(`assembled:${event.team.id}`, () => showTeamAssembledNotification(assembledEvent, notificationSettings))
-        navigate(`/teams/${event.team.id}/room`)
+        if (currentTeam) queueOrEnterRoom({ ...currentTeam, isAssembled: true, isFull: true, assembledAt: event.joinedAt })
         return
       }
       if (!currentTeam) void loadTeams(true)
@@ -246,7 +266,7 @@ export function DashboardPage({ user, onUserUpdated, onLogout }: DashboardPagePr
       updateTeamsFromEvent((current) => current.filter((team) => team.id !== event.team.id))
       if (currentTeam?.members.some((member) => member.id === user.id)) {
         notifyOnce(`assembled:${event.team.id}`, () => showTeamAssembledNotification(event, notificationSettings))
-        navigate(`/teams/${event.team.id}/room`)
+        queueOrEnterRoom({ ...currentTeam, isAssembled: true, isFull: true, assembledAt: event.assembledAt })
       }
     })
     channel.listen('.TeamMemberLeft', (event: TeamMemberLeftEvent) => {
@@ -260,9 +280,11 @@ export function DashboardPage({ user, onUserUpdated, onLogout }: DashboardPagePr
     })
     channel.listen('.TeamClosed', (event: TeamClosedEvent) => {
       updateTeamsFromEvent((current) => current.filter((team) => team.id !== event.teamId))
+      setCurrentRoomTeam((current) => current?.id === event.teamId ? null : current)
+      if (sessionStorage.getItem(pendingRoomStorageKey) === String(event.teamId)) sessionStorage.removeItem(pendingRoomStorageKey)
     })
     return () => { echo.leave('teams') }
-  }, [echo, user.id, loadTeams, navigate, notificationSettings, notifyOnce, updateTeamsFromEvent])
+  }, [echo, user.id, loadTeams, notificationSettings, notifyOnce, queueOrEnterRoom, updateTeamsFromEvent])
 
   const enableNotifications = async () => {
     setNotificationState(await requestNotificationPermission())
@@ -278,7 +300,7 @@ export function DashboardPage({ user, onUserUpdated, onLogout }: DashboardPagePr
         if (data.data.isAssembled) {
           const event = { team: { id: data.data.id, gameName: data.data.gameName }, assembledAt: data.data.assembledAt ?? new Date().toISOString() }
           notifyOnce(`assembled:${data.data.id}`, () => showTeamAssembledNotification(event, notificationSettings))
-          navigate(`/teams/${team.id}/room`)
+          queueOrEnterRoom(data.data)
           return
         }
       }
@@ -378,7 +400,7 @@ export function DashboardPage({ user, onUserUpdated, onLogout }: DashboardPagePr
           ) : (
             <div className="team-grid">{visibleTeams.map((team) => <TeamCard key={team.id} team={team} currentUser={user} busy={busyTeamId === team.id} onAction={handleAction} onOpen={setSelectedTeam} />)}</div>
           )}
-          {!realtimeConnected && <div className="modal-backdrop realtime-overlay"><section className="modal" role="alertdialog" aria-modal="true"><h2>实时连接已断开</h2><p>队伍状态可能无法实时同步，请重试连接。</p><button className="button-primary" type="button" onClick={() => window.location.reload()}><RefreshCw size={17} />重试连接</button></section></div>}
+          {realtimeStatus === 'unavailable' && <div className="modal-backdrop realtime-overlay"><section className="modal" role="alertdialog" aria-modal="true"><h2>实时连接已断开</h2><p>队伍状态可能无法实时同步，请重试连接。</p><button className="button-primary" type="button" onClick={() => window.location.reload()}><RefreshCw size={17} />重试连接</button></section></div>}
         </section>
       </main>
 

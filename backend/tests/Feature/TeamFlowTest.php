@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Events\TeamClosed;
 use App\Events\TeamCreated;
 use App\Events\TeamMemberJoined;
+use App\Events\TeamMemberLeft;
 use App\Models\Team;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -63,6 +64,7 @@ class TeamFlowTest extends TestCase
 
     public function test_member_can_replace_the_team_they_joined(): void
     {
+        Event::fake([TeamClosed::class, TeamCreated::class, TeamMemberLeft::class]);
         [$team] = $this->createTeam();
         $member = User::factory()->create();
         $team->members()->attach($member, ['joined_at' => now()]);
@@ -70,9 +72,11 @@ class TeamFlowTest extends TestCase
         $response = $this->actingAs($member)->postJson('/api/teams', ['replaceCurrentTeam' => true])
             ->assertCreated();
 
-        $this->assertNull($team->fresh()->closed_at);
+        $this->assertNotNull($team->fresh()->closed_at);
         $this->assertDatabaseHas('team_members', ['team_id' => $response->json('data.id'), 'user_id' => $member->id]);
         $this->assertDatabaseMissing('team_members', ['team_id' => $team->id, 'user_id' => $member->id]);
+        Event::assertDispatched(TeamMemberLeft::class);
+        Event::assertDispatched(TeamClosed::class);
     }
 
     public function test_replacement_cleans_up_duplicate_active_recruitments_from_legacy_data(): void
@@ -167,6 +171,21 @@ class TeamFlowTest extends TestCase
         $this->actingAs($owner)->deleteJson("/api/teams/{$team->id}/members/me")->assertUnprocessable();
         $this->actingAs($member)->deleteJson("/api/teams/{$team->id}/members/me")->assertNoContent();
         $this->assertDatabaseMissing('team_members', ['team_id' => $team->id, 'user_id' => $member->id]);
+        $this->assertNotNull($team->fresh()->closed_at);
+    }
+
+    public function test_team_stays_open_when_a_departure_leaves_two_members(): void
+    {
+        [$team] = $this->createTeam();
+        $members = User::factory()->count(2)->create();
+        foreach ($members as $member) {
+            $team->members()->attach($member, ['joined_at' => now()]);
+        }
+
+        $this->actingAs($members[0])->deleteJson("/api/teams/{$team->id}/members/me")->assertNoContent();
+
+        $this->assertNull($team->fresh()->closed_at);
+        $this->assertSame(2, $team->members()->count());
     }
 
     public function test_only_owner_can_close_and_closed_team_cannot_be_joined(): void

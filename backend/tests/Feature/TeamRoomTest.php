@@ -3,14 +3,18 @@
 namespace Tests\Feature;
 
 use App\Events\TeamAssembled;
+use App\Events\TeamClosed;
+use App\Events\TeamMemberLeft;
 use App\Events\TeamMessageCreated;
 use App\Models\Team;
 use App\Models\TeamMessage;
 use App\Models\User;
+use App\Services\LiveKitRoomManager;
 use Firebase\JWT\JWT;
 use Firebase\JWT\Key;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Event;
+use Mockery;
 use Tests\TestCase;
 
 class TeamRoomTest extends TestCase
@@ -75,6 +79,22 @@ class TeamRoomTest extends TestCase
         $this->assertNotNull($team->fresh()->assembled_at);
         $this->actingAs($owner)->getJson('/api/teams')->assertJsonCount(0, 'data');
         $this->actingAs($members[0])->getJson("/api/teams/{$team->id}")->assertNotFound();
+    }
+
+    public function test_assembled_room_closes_when_a_departure_leaves_one_member(): void
+    {
+        Event::fake([TeamMemberLeft::class, TeamClosed::class]);
+        [$team, $owner, $members] = $this->teamWithMembers(2, true);
+        $liveKit = Mockery::mock(LiveKitRoomManager::class);
+        $liveKit->shouldReceive('deleteRoom')->once()->with($team->id);
+        $this->app->instance(LiveKitRoomManager::class, $liveKit);
+
+        $this->actingAs($members[0])->deleteJson("/api/teams/{$team->id}/members/me")->assertNoContent();
+
+        $this->assertNotNull($team->fresh()->closed_at);
+        $this->actingAs($owner)->getJson('/api/teams/current')->assertJsonPath('data', null);
+        Event::assertDispatched(TeamMemberLeft::class);
+        Event::assertDispatched(TeamClosed::class);
     }
 
     public function test_members_can_send_paginate_and_mark_messages_read(): void

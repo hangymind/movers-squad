@@ -5,7 +5,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { Avatar } from '../components/Avatar'
 import { ErrorDialog } from '../components/ErrorDialog'
 import { api, getErrorMessage } from '../lib/api'
-import { createEcho, keepEchoConnection, observeEchoConnection } from '../lib/echo'
+import { createEcho, keepEchoConnection, observeEchoConnection, type EchoConnectionStatus } from '../lib/echo'
 import type { MessagePage, Team, TeamClosedEvent, TeamMemberLeftEvent, TeamMessage, TeamMessageCreatedEvent, User, VoiceCredentials } from '../types'
 
 interface TeamRoomPageProps { user: User; onLogout: () => Promise<void> }
@@ -29,7 +29,7 @@ export function TeamRoomPage({ user, onLogout }: TeamRoomPageProps) {
   const [error, setError] = useState('')
   const [voiceState, setVoiceState] = useState<VoiceState>('idle')
   const [micMuted, setMicMuted] = useState(false)
-  const [realtimeConnected, setRealtimeConnected] = useState(false)
+  const [realtimeStatus, setRealtimeStatus] = useState<EchoConnectionStatus>('reconnecting')
   const [remoteMuted, setRemoteMuted] = useState(false)
   const [voiceParticipants, setVoiceParticipants] = useState<Participant[]>([])
   const [activeSpeakers, setActiveSpeakers] = useState<Set<string>>(new Set())
@@ -39,12 +39,13 @@ export function TeamRoomPage({ user, onLogout }: TeamRoomPageProps) {
   const audioContainerRef = useRef<HTMLDivElement>(null)
   const remoteMutedRef = useRef(false)
 
-  const loadTeam = useCallback(async () => {
+  const loadTeam = useCallback(async (redirectOnFailure = true) => {
     try {
       const { data } = await api.get<{ data: Team }>(`/teams/${teamId}`)
+      sessionStorage.removeItem('movers.pendingRoomTeamId')
       setTeam(data.data)
     } catch {
-      navigate('/', { replace: true })
+      if (redirectOnFailure) navigate('/', { replace: true })
     }
   }, [navigate, teamId])
 
@@ -80,8 +81,17 @@ export function TeamRoomPage({ user, onLogout }: TeamRoomPageProps) {
     })
     return () => { echo.leave(`team.${teamId}`); echo.disconnect() }
   }, [echo, loadTeam, navigate, teamId, user.id])
-  useEffect(() => observeEchoConnection(echo, setRealtimeConnected), [echo])
+  useEffect(() => observeEchoConnection(echo, setRealtimeStatus), [echo])
   useEffect(() => keepEchoConnection(echo), [echo])
+
+  useEffect(() => {
+    if (realtimeStatus === 'connected') return
+    const interval = window.setInterval(() => {
+      void loadTeam(false)
+      void loadMessages().catch(() => undefined)
+    }, 5000)
+    return () => window.clearInterval(interval)
+  }, [loadMessages, loadTeam, realtimeStatus])
 
   useEffect(() => {
     const list = messageListRef.current
@@ -209,7 +219,7 @@ export function TeamRoomPage({ user, onLogout }: TeamRoomPageProps) {
   if (!team) return <div className="room-loading" role="status">正在进入队伍房间...</div>
 
   return <div className="team-room-page">
-    {!realtimeConnected && <div className="modal-backdrop realtime-overlay"><section className="modal" role="alertdialog" aria-modal="true"><h2>实时连接已断开</h2><p>队伍和聊天状态可能无法实时同步。</p><button className="button-primary" type="button" onClick={() => window.location.reload()}>重试连接</button></section></div>}
+    {realtimeStatus === 'unavailable' && <div className="modal-backdrop realtime-overlay"><section className="modal" role="alertdialog" aria-modal="true"><h2>实时连接已断开</h2><p>队伍和聊天状态可能无法实时同步。</p><button className="button-primary" type="button" onClick={() => window.location.reload()}>重试连接</button></section></div>}
     <header className="room-topbar">
       <div className="brand-lockup"><span>Movers Squad</span><small>队伍房间</small></div>
       <div className="room-topbar-actions"><button className="button-secondary" type="button" onClick={() => navigate('/?room=1')}><ArrowLeft size={16} />返回大厅</button><span className="room-status"><i />{team.isAssembled ? '已成队' : '等待队友'}</span><button className="button-secondary" type="button" onClick={() => void onLogout()}><LogOut size={16} />退出登录</button></div>

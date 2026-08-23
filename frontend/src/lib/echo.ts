@@ -58,13 +58,37 @@ export function createEcho(key: string) {
   })
 }
 
-export function observeEchoConnection(echo: ReturnType<typeof createEcho>, listener: (connected: boolean) => void) {
-  const connection = echo.connector.pusher.connection
-  const handleStateChange = ({ current }: { current: string }) => listener(current === 'connected')
-  connection.bind('state_change', handleStateChange)
-  listener(connection.state === 'connected')
+export type EchoConnectionStatus = 'connected' | 'reconnecting' | 'unavailable'
 
-  return () => { connection.unbind('state_change', handleStateChange) }
+export function observeEchoConnection(echo: ReturnType<typeof createEcho>, listener: (status: EchoConnectionStatus) => void) {
+  const connection = echo.connector.pusher.connection
+  let graceTimer: number | null = null
+  const clearGraceTimer = () => {
+    if (graceTimer !== null) window.clearTimeout(graceTimer)
+    graceTimer = null
+  }
+  const reportState = (current: string) => {
+    if (current === 'connected') {
+      clearGraceTimer()
+      listener('connected')
+      return
+    }
+    listener('reconnecting')
+    if (graceTimer === null) {
+      graceTimer = window.setTimeout(() => {
+        graceTimer = null
+        if (connection.state !== 'connected') listener('unavailable')
+      }, 15_000)
+    }
+  }
+  const handleStateChange = ({ current }: { current: string }) => reportState(current)
+  connection.bind('state_change', handleStateChange)
+  reportState(connection.state)
+
+  return () => {
+    clearGraceTimer()
+    connection.unbind('state_change', handleStateChange)
+  }
 }
 
 export function keepEchoConnection(echo: ReturnType<typeof createEcho>) {
