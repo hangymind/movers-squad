@@ -151,7 +151,7 @@ class TeamController extends Controller
             }
 
             $team->members()->attach($user->id, ['joined_at' => now()]);
-            $assembled = $team->members()->count() >= Team::MAX_MEMBERS;
+            $assembled = $team->members()->count() >= ($team->max_members ?? Team::MAX_MEMBERS);
             if ($assembled) {
                 $team->update(['assembled_at' => now()]);
             }

@@ -125,7 +125,7 @@ export function DashboardPage({ user, onUserUpdated, onLogout }: DashboardPagePr
   useEffect(() => {
     const sync = () => {
       void loadTeams(true)
-      if (!realtimeConnected) void checkCurrentTeam().catch(() => undefined)
+      void checkCurrentTeam().catch(() => undefined)
     }
     const interval = window.setInterval(sync, realtimeConnected ? 30_000 : 5_000)
     window.addEventListener('focus', sync)

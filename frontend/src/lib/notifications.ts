@@ -3,6 +3,13 @@ import type { NotificationSettings, TeamAssembledEvent, TeamCreatedEvent, TeamMe
 export const defaultNotificationSettings: NotificationSettings = { showJoinNotifications: true, showTeamCreatedNotifications: true, showMemberLeftNotifications: true, notificationSoundEnabled: true }
 
 let permissionRequest: Promise<NotificationPermission> | null = null
+let serviceWorkerRegistration: Promise<ServiceWorkerRegistration | null> | null = null
+
+export function registerNotificationServiceWorker(): Promise<ServiceWorkerRegistration | null> {
+  if (!('serviceWorker' in navigator)) return Promise.resolve(null)
+  serviceWorkerRegistration ??= navigator.serviceWorker.register('/notification-sw.js').catch(() => null)
+  return serviceWorkerRegistration
+}
 
 export function requestNotificationPermission(): Promise<NotificationPermission | 'unsupported'> {
   if (!('Notification' in window)) return Promise.resolve('unsupported')
@@ -15,6 +22,23 @@ export function requestNotificationPermission(): Promise<NotificationPermission 
 
 function showNotification(title: string, options: NotificationOptions, settings: NotificationSettings): Notification | null {
   if (!('Notification' in window) || Notification.permission !== 'granted') return null
+
+  if (document.visibilityState === 'hidden' && 'serviceWorker' in navigator) {
+    const tag = options.tag
+    void registerNotificationServiceWorker().then(async (registration) => {
+      if (!registration) return
+      try {
+        await registration.showNotification(title, options)
+        window.setTimeout(() => {
+          void registration.getNotifications(tag ? { tag } : undefined).then((notifications) => notifications.forEach((notification) => notification.close())).catch(() => undefined)
+        }, 3000)
+      } catch {
+        // A denied OS-level notification does not interrupt realtime state updates.
+      }
+    })
+    if (settings.notificationSoundEnabled) { const audio = new Audio('/assets/noti.mp3'); audio.play().catch(() => undefined) }
+    return null
+  }
 
   try {
     const notification = new Notification(title, options)

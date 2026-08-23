@@ -17,6 +17,7 @@ describe('showJoinNotification', () => {
     close.mockClear()
     Object.defineProperty(notification, 'permission', { value: 'granted', configurable: true })
     vi.stubGlobal('Notification', notification)
+    Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true })
   })
 
   it('shows the joined user and game to existing members', () => {
@@ -55,5 +56,17 @@ describe('showJoinNotification', () => {
     const assembled: TeamAssembledEvent = { team: { id: 8, gameName: 'Florr.io' }, assembledAt: '2026-08-22T12:00:00Z' }
     showTeamAssembledNotification(assembled)
     expect(notification).toHaveBeenCalledWith('队伍已满，准备出发', expect.objectContaining({ tag: 'team-8-assembled' }))
+  })
+
+  it('uses the service worker notification API while the page is in the background', async () => {
+    const showNotification = vi.fn().mockResolvedValue(undefined)
+    const registration = { showNotification, getNotifications: vi.fn().mockResolvedValue([]) }
+    Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true })
+    Object.defineProperty(navigator, 'serviceWorker', { value: { register: vi.fn().mockResolvedValue(registration) }, configurable: true })
+
+    showJoinNotification(event, 1, { showJoinNotifications: true, showTeamCreatedNotifications: true, showMemberLeftNotifications: true, notificationSoundEnabled: false })
+
+    await vi.waitFor(() => expect(showNotification).toHaveBeenCalledWith('blue-2048 加入组队', expect.objectContaining({ tag: 'team-8-joined-2' })))
+    expect(notification).not.toHaveBeenCalled()
   })
 })

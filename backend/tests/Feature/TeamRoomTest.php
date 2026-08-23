@@ -7,10 +7,10 @@ use App\Events\TeamMessageCreated;
 use App\Models\Team;
 use App\Models\TeamMessage;
 use App\Models\User;
-use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Support\Facades\Event;
 use Firebase\JWT\JWT;
 use Firebase\JWT\Key;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Event;
 use Tests\TestCase;
 
 class TeamRoomTest extends TestCase
@@ -43,6 +43,24 @@ class TeamRoomTest extends TestCase
         $this->actingAs($owner)->getJson('/api/teams')->assertJsonCount(0, 'data');
         $this->actingAs($owner)->getJson('/api/teams/current')->assertJsonPath('data.id', $team->id);
         Event::assertDispatched(TeamAssembled::class, fn (TeamAssembled $event) => $event->team->is($team));
+    }
+
+    public function test_team_assembles_at_its_configured_member_limit(): void
+    {
+        foreach ([2, 3, 4] as $maxMembers) {
+            Event::fake([TeamAssembled::class]);
+            [$team] = $this->teamWithMembers($maxMembers - 1);
+            $team->update(['max_members' => $maxMembers]);
+            $lastMember = User::factory()->create();
+
+            $this->actingAs($lastMember)->postJson("/api/teams/{$team->id}/join")
+                ->assertOk()
+                ->assertJsonPath('data.maxMembers', $maxMembers)
+                ->assertJsonPath('data.memberCount', $maxMembers)
+                ->assertJsonPath('data.isAssembled', true);
+
+            $this->assertNotNull($team->fresh()->assembled_at);
+        }
     }
 
     public function test_assembled_team_detail_is_private_and_member_exit_does_not_reopen_recruitment(): void
