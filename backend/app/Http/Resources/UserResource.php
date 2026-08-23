@@ -25,6 +25,12 @@ class UserResource extends JsonResource
             'banId' => $this->when($canViewPrivate, $this->ban_id),
             'bannedAt' => $this->when($canViewPrivate, $this->banned_at?->toISOString()),
             'reverbKey' => $this->when($isSelf, (string) config('broadcasting.connections.reverb.key')),
+            'notificationSettings' => $this->when($isSelf, fn () => [
+                'showJoinNotifications' => (bool) $this->show_join_notifications,
+                'showTeamCreatedNotifications' => (bool) $this->show_team_created_notifications,
+                'showMemberLeftNotifications' => (bool) $this->show_member_left_notifications,
+                'notificationSoundEnabled' => (bool) $this->notification_sound_enabled,
+            ]),
             'florrBinding' => $this->when($isSelf, fn () => [
                 'id' => $binding?->id,
                 'status' => $this->florr_verified_at !== null ? 'approved' : ($binding?->status ?? 'unbound'),

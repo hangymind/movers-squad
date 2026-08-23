@@ -2,6 +2,7 @@
 
 namespace App\Events;
 
+use App\Http\Resources\TeamResource;
 use App\Models\Team;
 use Illuminate\Broadcasting\InteractsWithSockets;
 use Illuminate\Broadcasting\PrivateChannel;
@@ -27,6 +28,8 @@ class TeamCreated implements ShouldBroadcastNow
 
     public function broadcastWith(): array
     {
-        return ['teamId' => $this->team->id];
+        $team = $this->team->loadMissing(['owner', 'members']);
+
+        return ['teamId' => $team->id, 'team' => (new TeamResource($team))->resolve()];
     }
 }

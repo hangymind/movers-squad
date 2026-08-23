@@ -10,6 +10,14 @@ export interface User {
   isFlorrVerified?: boolean
   florrBinding?: FlorrBindingSummary
   reverbKey?: string
+  notificationSettings?: NotificationSettings
+}
+
+export interface NotificationSettings {
+  showJoinNotifications: boolean
+  showTeamCreatedNotifications: boolean
+  showMemberLeftNotifications: boolean
+  notificationSoundEnabled: boolean
 }
 
 export type FlorrBindingStatus = 'unbound' | 'pending' | 'approved' | 'rejected'
@@ -69,6 +77,7 @@ export interface TeamMemberJoinedEvent {
 
 export interface TeamCreatedEvent {
   teamId: number
+  team?: Pick<Team, 'id' | 'gameName' | 'owner' | 'maxMembers' | 'memberCount'>
 }
 
 export interface TeamAssembledEvent {

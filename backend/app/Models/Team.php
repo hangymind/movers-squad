@@ -14,11 +14,11 @@ class Team extends Model
 
     public const MAX_MEMBERS = 4;
 
-    protected $fillable = ['game_name', 'note', 'owner_id', 'closed_at', 'assembled_at', 'min_level', 'excluded_florr_ids'];
+    protected $fillable = ['game_name', 'note', 'owner_id', 'closed_at', 'assembled_at', 'min_level', 'excluded_florr_ids', 'max_members'];
 
     protected function casts(): array
     {
-        return ['closed_at' => 'datetime', 'assembled_at' => 'datetime', 'min_level' => 'integer', 'excluded_florr_ids' => 'array'];
+        return ['closed_at' => 'datetime', 'assembled_at' => 'datetime', 'min_level' => 'integer', 'max_members' => 'integer', 'excluded_florr_ids' => 'array'];
     }
 
     public function owner(): BelongsTo

@@ -14,6 +14,7 @@ interface CreateTeamFormProps {
 export function CreateTeamForm({ open, replaceCurrentTeam = false, onClose, onCreated }: CreateTeamFormProps) {
   const [note, setNote] = useState('')
   const [minLevel, setMinLevel] = useState('1')
+  const [maxMembers, setMaxMembers] = useState('4')
   const [excludedIds, setExcludedIds] = useState('')
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
@@ -26,9 +27,10 @@ export function CreateTeamForm({ open, replaceCurrentTeam = false, onClose, onCr
     setSubmitting(true)
     try {
       const excludedFlorrIds = excludedIds.split(/[\n,]+/).map((id) => id.trim()).filter(Boolean)
-      const { data } = await api.post<{ data: Team }>('/teams', { note, minLevel: Number(minLevel), excludedFlorrIds, replaceCurrentTeam })
+      const { data } = await api.post<{ data: Team }>('/teams', { note, minLevel: Number(minLevel), excludedFlorrIds, maxMembers: Number(maxMembers), replaceCurrentTeam })
       setNote('')
       setMinLevel('1')
+      setMaxMembers('4')
       setExcludedIds('')
       onCreated(data.data)
     } catch (requestError) {
@@ -48,6 +50,7 @@ export function CreateTeamForm({ open, replaceCurrentTeam = false, onClose, onCr
         <form onSubmit={handleSubmit}>
           <div className="form-grid">
             <label>最低等级<input type="number" min={1} max={1000} value={minLevel} onChange={(event) => setMinLevel(event.target.value)} required /></label>
+            <label>队伍总人数<select value={maxMembers} onChange={(event) => setMaxMembers(event.target.value)}><option value="2">2 人</option><option value="3">3 人</option><option value="4">4 人</option></select></label>
             <label>排除 Florr ID <span className="optional">选填</span><textarea value={excludedIds} onChange={(event) => setExcludedIds(event.target.value)} placeholder="每行或逗号分隔一个 ID" maxLength={3300} rows={3} /></label>
           </div>
           <label>备注 <span className="optional">选填</span><textarea autoFocus value={note} onChange={(event) => setNote(event.target.value)} placeholder="说明时间、区域、玩法或其他要求" maxLength={500} rows={4} /><span className="field-count">{note.length}/500</span></label>

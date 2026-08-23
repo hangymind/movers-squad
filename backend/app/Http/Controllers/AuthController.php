@@ -43,9 +43,33 @@ class AuthController extends Controller
             'level' => ['sometimes', 'integer', 'min:1', 'max:1000'],
         ]);
         $updates = [];
-        if (array_key_exists('avatarUrl', $data)) $updates['avatar_url'] = $data['avatarUrl'];
-        if (array_key_exists('level', $data)) $updates['level'] = $data['level'];
+        if (array_key_exists('avatarUrl', $data)) {
+            $updates['avatar_url'] = $data['avatarUrl'];
+        }
+        if (array_key_exists('level', $data)) {
+            $updates['level'] = $data['level'];
+        }
         $request->user()->update($updates);
+
+        return new UserResource($request->user()->refresh());
+    }
+
+    public function updateNotificationSettings(Request $request): UserResource
+    {
+        $data = $request->validate([
+            'showJoinNotifications' => ['required', 'boolean'],
+            'showTeamCreatedNotifications' => ['required', 'boolean'],
+            'showMemberLeftNotifications' => ['required', 'boolean'],
+            'notificationSoundEnabled' => ['required', 'boolean'],
+        ]);
+
+        $request->user()->update([
+            'show_join_notifications' => $data['showJoinNotifications'],
+            'show_team_created_notifications' => $data['showTeamCreatedNotifications'],
+            'show_member_left_notifications' => $data['showMemberLeftNotifications'],
+            'notification_sound_enabled' => $data['notificationSoundEnabled'],
+        ]);
+
         return new UserResource($request->user()->refresh());
     }
 

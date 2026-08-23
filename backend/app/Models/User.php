@@ -5,11 +5,11 @@ namespace App\Models;
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
-use Illuminate\Foundation\Auth\User as Authenticatable;
-use Illuminate\Notifications\Notifiable;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Foundation\Auth\User as Authenticatable;
+use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
 
 class User extends Authenticatable
@@ -32,6 +32,10 @@ class User extends Authenticatable
         'is_admin',
         'banned_at',
         'ban_id',
+        'show_join_notifications',
+        'show_team_created_notifications',
+        'show_member_left_notifications',
+        'notification_sound_enabled',
     ];
 
     /**
@@ -57,6 +61,10 @@ class User extends Authenticatable
             'is_admin' => 'boolean',
             'florr_verified_at' => 'datetime',
             'banned_at' => 'datetime',
+            'show_join_notifications' => 'boolean',
+            'show_team_created_notifications' => 'boolean',
+            'show_member_left_notifications' => 'boolean',
+            'notification_sound_enabled' => 'boolean',
         ];
     }
 

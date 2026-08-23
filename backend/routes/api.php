@@ -17,6 +17,7 @@ Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:lo
 Route::middleware('auth:sanctum')->group(function (): void {
     Route::get('/user', fn (Request $request) => new UserResource($request->user()))->middleware('throttle:read');
     Route::patch('/user', [AuthController::class, 'updateProfile'])->middleware(['not_banned', 'throttle:write']);
+    Route::patch('/user/notification-settings', [AuthController::class, 'updateNotificationSettings'])->middleware(['not_banned', 'throttle:write']);
     Route::post('/logout', [AuthController::class, 'logout'])->middleware('throttle:write');
     Route::post('/florr-bindings', [FlorrBindingController::class, 'store'])->middleware(['not_banned', 'throttle:upload']);
     Route::post('/florr-bindings/{application}/acknowledge', [FlorrBindingController::class, 'acknowledge'])->middleware('throttle:write');

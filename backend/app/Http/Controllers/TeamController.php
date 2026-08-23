@@ -66,6 +66,7 @@ class TeamController extends Controller
             'minLevel' => ['nullable', 'integer', 'min:1', 'max:1000'],
             'excludedFlorrIds' => ['nullable', 'array', 'max:50'],
             'excludedFlorrIds.*' => ['string', 'max:64', 'regex:/^[\pL\pN_.:-]+$/u'],
+            'maxMembers' => ['nullable', 'integer', 'min:2', 'max:4'],
             'replaceCurrentTeam' => ['nullable', 'boolean'],
         ]);
         $excludedIds = collect($data['excludedFlorrIds'] ?? [])->map(fn (string $id) => trim($id))->filter()->unique()->values()->all();
@@ -100,6 +101,7 @@ class TeamController extends Controller
                 'note' => isset($data['note']) && trim($data['note']) !== '' ? trim($data['note']) : null,
                 'min_level' => $data['minLevel'] ?? 1,
                 'excluded_florr_ids' => $excludedIds,
+                'max_members' => $data['maxMembers'] ?? Team::MAX_MEMBERS,
                 'owner_id' => $user->id,
             ]);
             $team->members()->attach($user->id, ['joined_at' => now()]);
@@ -144,7 +146,7 @@ class TeamController extends Controller
                 throw new ConflictHttpException('你的 Florr ID 不符合该队伍的加入条件。');
             }
 
-            if ($team->members()->count() >= Team::MAX_MEMBERS) {
+            if ($team->members()->count() >= ($team->max_members ?? Team::MAX_MEMBERS)) {
                 throw new ConflictHttpException('该队伍已满员。');
             }
 

@@ -5,7 +5,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { Avatar } from '../components/Avatar'
 import { ErrorDialog } from '../components/ErrorDialog'
 import { api, getErrorMessage } from '../lib/api'
-import { createEcho } from '../lib/echo'
+import { createEcho, observeEchoConnection } from '../lib/echo'
 import type { MessagePage, Team, TeamClosedEvent, TeamMemberLeftEvent, TeamMessage, TeamMessageCreatedEvent, User, VoiceCredentials } from '../types'
 
 interface TeamRoomPageProps { user: User; onLogout: () => Promise<void> }
@@ -29,6 +29,7 @@ export function TeamRoomPage({ user, onLogout }: TeamRoomPageProps) {
   const [error, setError] = useState('')
   const [voiceState, setVoiceState] = useState<VoiceState>('idle')
   const [micMuted, setMicMuted] = useState(false)
+  const [realtimeConnected, setRealtimeConnected] = useState(false)
   const [remoteMuted, setRemoteMuted] = useState(false)
   const [voiceParticipants, setVoiceParticipants] = useState<Participant[]>([])
   const [activeSpeakers, setActiveSpeakers] = useState<Set<string>>(new Set())
@@ -80,6 +81,7 @@ export function TeamRoomPage({ user, onLogout }: TeamRoomPageProps) {
     })
     return () => { echo.leave(`team.${teamId}`); echo.disconnect() }
   }, [echo, loadTeam, navigate, teamId, user.id])
+  useEffect(() => observeEchoConnection(echo, setRealtimeConnected), [echo])
 
   useEffect(() => {
     const list = messageListRef.current
@@ -154,9 +156,9 @@ export function TeamRoomPage({ user, onLogout }: TeamRoomPageProps) {
       room.on(RoomEvent.Reconnected, () => setVoiceState('connected'))
       room.on(RoomEvent.Disconnected, () => { setVoiceState('idle'); setVoiceParticipants([]); setActiveSpeakers(new Set()) })
       await room.connect(data.data.serverUrl, data.data.token)
-      await room.localParticipant.setMicrophoneEnabled(true)
+      try { await room.localParticipant.setMicrophoneEnabled(false) } catch { /* remain muted if permission is unavailable */ }
       refreshVoiceParticipants(room)
-      setMicMuted(false)
+      setMicMuted(true)
       setVoiceState('connected')
     } catch (requestError) {
       roomRef.current?.disconnect()
@@ -207,6 +209,7 @@ export function TeamRoomPage({ user, onLogout }: TeamRoomPageProps) {
   if (!team) return <div className="room-loading" role="status">正在进入队伍房间...</div>
 
   return <div className="team-room-page">
+    {!realtimeConnected && <div className="modal-backdrop realtime-overlay"><section className="modal" role="alertdialog" aria-modal="true"><h2>实时连接已断开</h2><p>队伍和聊天状态可能无法实时同步。</p><button className="button-primary" type="button" onClick={() => window.location.reload()}>重试连接</button></section></div>}
     <header className="room-topbar">
       <div className="brand-lockup"><span>Movers Squad</span><small>队伍房间</small></div>
       <div className="room-topbar-actions"><span className="room-status"><i />已成队</span><button className="button-secondary" type="button" onClick={() => void onLogout()}><LogOut size={16} />退出登录</button></div>
