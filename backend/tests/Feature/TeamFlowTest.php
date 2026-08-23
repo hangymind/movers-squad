@@ -61,17 +61,18 @@ class TeamFlowTest extends TestCase
         Event::assertDispatched(TeamCreated::class, fn (TeamCreated $event) => $event->team->id === $newTeamId);
     }
 
-    public function test_non_owner_cannot_replace_the_team_they_joined(): void
+    public function test_member_can_replace_the_team_they_joined(): void
     {
         [$team] = $this->createTeam();
         $member = User::factory()->create();
         $team->members()->attach($member, ['joined_at' => now()]);
 
-        $this->actingAs($member)->postJson('/api/teams', ['replaceCurrentTeam' => true])
-            ->assertConflict();
+        $response = $this->actingAs($member)->postJson('/api/teams', ['replaceCurrentTeam' => true])
+            ->assertCreated();
 
         $this->assertNull($team->fresh()->closed_at);
-        $this->assertDatabaseCount('teams', 1);
+        $this->assertDatabaseHas('team_members', ['team_id' => $response->json('data.id'), 'user_id' => $member->id]);
+        $this->assertDatabaseMissing('team_members', ['team_id' => $team->id, 'user_id' => $member->id]);
     }
 
     public function test_replacement_cleans_up_duplicate_active_recruitments_from_legacy_data(): void

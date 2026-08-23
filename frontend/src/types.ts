@@ -68,6 +68,8 @@ export interface Team {
   createdAt: string
 }
 
+export type AdminTeam = Team
+
 export interface TeamMemberJoinedEvent {
   team: Pick<Team, 'id' | 'gameName'>
   joinedUser: User

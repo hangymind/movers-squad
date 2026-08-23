@@ -68,14 +68,29 @@ export function observeEchoConnection(echo: ReturnType<typeof createEcho>, liste
 }
 
 export function keepEchoConnection(echo: ReturnType<typeof createEcho>) {
+  const connection = echo.connector.pusher.connection
+  let connectingSince = connection.state === 'connecting' ? Date.now() : 0
   const reconnect = () => {
-    const connection = echo.connector.pusher.connection
-    if (connection.state === 'disconnected' || connection.state === 'unavailable') connection.connect()
+    if (connection.state === 'disconnected' || connection.state === 'unavailable') {
+      connectingSince = Date.now()
+      connection.connect()
+      return
+    }
+    if (connection.state === 'connecting' && connectingSince > 0 && Date.now() - connectingSince >= 15_000) {
+      connection.disconnect()
+      connectingSince = Date.now()
+      connection.connect()
+    }
   }
+  const handleStateChange = ({ current }: { current: string }) => { connectingSince = current === 'connecting' ? Date.now() : 0 }
+  connection.bind('state_change', handleStateChange)
   document.addEventListener('visibilitychange', reconnect)
   window.addEventListener('focus', reconnect)
+  const watchdog = window.setInterval(reconnect, 5000)
   reconnect()
   return () => {
+    window.clearInterval(watchdog)
+    connection.unbind('state_change', handleStateChange)
     document.removeEventListener('visibilitychange', reconnect)
     window.removeEventListener('focus', reconnect)
   }

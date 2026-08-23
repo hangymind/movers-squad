@@ -71,7 +71,7 @@ class TeamController extends Controller
         ]);
         $excludedIds = collect($data['excludedFlorrIds'] ?? [])->map(fn (string $id) => trim($id))->filter()->unique()->values()->all();
 
-        [$team, $replacedTeams] = DB::transaction(function () use ($request, $data, $excludedIds): array {
+        [$team, $replacedTeams, $leftTeams] = DB::transaction(function () use ($request, $data, $excludedIds): array {
             $user = User::query()->lockForUpdate()->findOrFail($request->user()->id);
             $activeTeams = Team::query()
                 ->whereNull('closed_at')
@@ -80,6 +80,8 @@ class TeamController extends Controller
                 ->lockForUpdate()
                 ->get();
 
+            $replacedTeams = collect();
+            $leftTeams = collect();
             if ($activeTeams->isNotEmpty()) {
                 if (! ($data['replaceCurrentTeam'] ?? false)) {
                     throw new ConflictHttpException('你已经加入了一支未关闭的队伍。');
@@ -87,12 +89,14 @@ class TeamController extends Controller
                 if ($activeTeams->contains(fn (Team $team): bool => $team->assembled_at !== null)) {
                     throw new ConflictHttpException('已经成队的队伍不能替换招募。');
                 }
-                if ($activeTeams->contains(fn (Team $team): bool => $team->owner_id !== $user->id)) {
-                    throw new ConflictHttpException('只有当前招募的队长可以发起新招募。');
-                }
-
                 foreach ($activeTeams as $activeTeam) {
-                    $activeTeam->update(['closed_at' => now()]);
+                    if ($activeTeam->owner_id === $user->id) {
+                        $activeTeam->update(['closed_at' => now()]);
+                        $replacedTeams->push($activeTeam);
+                    } else {
+                        $activeTeam->members()->detach($user->id);
+                        $leftTeams->push($activeTeam);
+                    }
                 }
             }
 
@@ -106,11 +110,14 @@ class TeamController extends Controller
             ]);
             $team->members()->attach($user->id, ['joined_at' => now()]);
 
-            return [$team, $activeTeams];
+            return [$team, $replacedTeams, $leftTeams];
         });
 
         foreach ($replacedTeams as $replacedTeam) {
             $this->broadcastSafely(new TeamClosed($replacedTeam));
+        }
+        foreach ($leftTeams as $leftTeam) {
+            $this->broadcastSafely(new TeamMemberLeft($leftTeam, $request->user()));
         }
         $this->broadcastSafely(new TeamCreated($team));
 

@@ -3,7 +3,7 @@ import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Team, User } from '../types'
 import { api } from '../lib/api'
-import { showJoinNotification } from '../lib/notifications'
+import { showJoinNotification, showMemberLeftNotification, showTeamCreatedNotification } from '../lib/notifications'
 import { DashboardPage } from './DashboardPage'
 
 const mocks = vi.hoisted(() => ({
@@ -28,6 +28,8 @@ vi.mock('../lib/echo', () => ({
 vi.mock('../lib/notifications', () => ({
   requestNotificationPermission: vi.fn().mockResolvedValue('granted'),
   showJoinNotification: vi.fn(),
+  showMemberLeftNotification: vi.fn(),
+  showTeamCreatedNotification: vi.fn(),
   showTeamAssembledNotification: vi.fn(),
 }))
 
@@ -56,6 +58,9 @@ describe('DashboardPage recruitment replacement', () => {
     vi.mocked(api.get).mockReset()
     vi.mocked(api.post).mockReset()
     vi.mocked(showJoinNotification).mockReset()
+    vi.mocked(showMemberLeftNotification).mockReset()
+    vi.mocked(showTeamCreatedNotification).mockReset()
+    Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true })
     mocks.handlers.clear()
     mocks.channel.listen.mockReset().mockImplementation((event: string, handler: (payload: unknown) => void) => {
       mocks.handlers.set(event, handler)
@@ -118,6 +123,46 @@ describe('DashboardPage recruitment replacement', () => {
     fireEvent.click(screen.getByTitle('刷新队伍'))
 
     expect(await screen.findByText('fallback-member')).toBeInTheDocument()
-    expect(showJoinNotification).toHaveBeenCalledWith(expect.objectContaining({ joinedUser }), owner.id)
+    expect(showJoinNotification).toHaveBeenCalledWith(expect.objectContaining({ joinedUser }), owner.id, expect.any(Object))
+  })
+
+  it('starts the background worker while hidden and stops it after returning', async () => {
+    const postMessage = vi.fn()
+    const terminate = vi.fn()
+    class WorkerMock {
+      postMessage = postMessage
+      terminate = terminate
+      addEventListener = vi.fn()
+    }
+    vi.stubGlobal('Worker', WorkerMock)
+    render(<MemoryRouter><DashboardPage user={owner} onUserUpdated={vi.fn()} onLogout={vi.fn()} /></MemoryRouter>)
+    await screen.findByText('1 支队伍')
+
+    Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true })
+    act(() => document.dispatchEvent(new Event('visibilitychange')))
+    expect(postMessage).toHaveBeenCalledWith({ type: 'start' })
+    expect(postMessage).toHaveBeenCalledWith({ type: 'sync-now' })
+
+    Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true })
+    act(() => document.dispatchEvent(new Event('visibilitychange')))
+    expect(postMessage).toHaveBeenCalledWith({ type: 'stop' })
+    vi.unstubAllGlobals()
+  })
+
+  it('detects created and departed members from polling snapshots', async () => {
+    render(<MemoryRouter><DashboardPage user={owner} onUserUpdated={vi.fn()} onLogout={vi.fn()} /></MemoryRouter>)
+    await screen.findByText('1 支队伍')
+    const departed: User = { id: 2, florrId: 'departed', avatarUrl: null }
+    const teamWithMember = { ...currentTeam, members: [owner, departed], memberCount: 2 }
+    const newOwner: User = { id: 3, florrId: 'new-owner', avatarUrl: null }
+    const newTeam = { ...currentTeam, id: 10, owner: newOwner, members: [newOwner], createdAt: '2026-08-23T02:00:00Z' }
+    vi.mocked(api.get).mockImplementation((url) => Promise.resolve({ data: url === '/teams/current' ? { data: null } : { data: [teamWithMember] } }))
+    fireEvent.click(screen.getByTitle('刷新队伍'))
+    await screen.findByText('departed')
+    vi.mocked(api.get).mockImplementation((url) => Promise.resolve({ data: url === '/teams/current' ? { data: null } : { data: [currentTeam, newTeam] } }))
+    fireEvent.click(screen.getByTitle('刷新队伍'))
+
+    await waitFor(() => expect(showMemberLeftNotification).toHaveBeenCalledWith(expect.objectContaining({ user: departed }), expect.any(Object)))
+    expect(showTeamCreatedNotification).toHaveBeenCalledWith(expect.objectContaining({ teamId: 10 }), expect.any(Object))
   })
 })

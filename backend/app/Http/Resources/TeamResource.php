@@ -10,7 +10,7 @@ class TeamResource extends JsonResource
 {
     public function toArray(Request $request): array
     {
-        $memberCount = $this->whenCounted('members', $this->members_count);
+        $memberCount = (int) ($this->members_count ?? ($this->relationLoaded('members') ? $this->members->count() : $this->members()->count()));
 
         return [
             'id' => $this->id,

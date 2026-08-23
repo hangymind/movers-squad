@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Crown, Headphones, HeadphoneOff, LogOut, Mic, MicOff, Phone, PhoneOff, Send, UsersRound, XCircle } from 'lucide-react'
+import { ArrowLeft, Crown, Headphones, HeadphoneOff, LogOut, Mic, MicOff, Phone, PhoneOff, Send, UsersRound, XCircle } from 'lucide-react'
 import { Room, RoomEvent, Track, type Participant, type RemoteTrack, type RemoteTrackPublication } from 'livekit-client'
 import { useNavigate, useParams } from 'react-router-dom'
 import { Avatar } from '../components/Avatar'
@@ -212,7 +212,7 @@ export function TeamRoomPage({ user, onLogout }: TeamRoomPageProps) {
     {!realtimeConnected && <div className="modal-backdrop realtime-overlay"><section className="modal" role="alertdialog" aria-modal="true"><h2>实时连接已断开</h2><p>队伍和聊天状态可能无法实时同步。</p><button className="button-primary" type="button" onClick={() => window.location.reload()}>重试连接</button></section></div>}
     <header className="room-topbar">
       <div className="brand-lockup"><span>Movers Squad</span><small>队伍房间</small></div>
-      <div className="room-topbar-actions"><span className="room-status"><i />{team.isAssembled ? '已成队' : '等待队友'}</span><button className="button-secondary" type="button" onClick={() => void onLogout()}><LogOut size={16} />退出登录</button></div>
+      <div className="room-topbar-actions"><button className="button-secondary" type="button" onClick={() => navigate('/?room=1')}><ArrowLeft size={16} />返回大厅</button><span className="room-status"><i />{team.isAssembled ? '已成队' : '等待队友'}</span><button className="button-secondary" type="button" onClick={() => void onLogout()}><LogOut size={16} />退出登录</button></div>
     </header>
 
     <main className="room-shell">

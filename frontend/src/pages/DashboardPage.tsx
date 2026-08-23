@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AlertTriangle, Bell, BellOff, CheckCircle2, ChevronDown, Clock3, Link2, LogOut, Plus, RefreshCw, ShieldCheck, UsersRound, UserCog, XCircle } from 'lucide-react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { Avatar } from '../components/Avatar'
 import { CreateTeamForm } from '../components/CreateTeamForm'
 import { TeamCard } from '../components/TeamCard'
@@ -20,6 +20,7 @@ const fallbackNotificationSettings = { showJoinNotifications: true, showTeamCrea
 
 export function DashboardPage({ user, onUserUpdated, onLogout }: DashboardPageProps) {
   const navigate = useNavigate()
+  const location = useLocation()
   const [teams, setTeams] = useState<Team[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -31,6 +32,7 @@ export function DashboardPage({ user, onUserUpdated, onLogout }: DashboardPagePr
   const [profileOpen, setProfileOpen] = useState(false)
   const [notificationSettingsOpen, setNotificationSettingsOpen] = useState(false)
   const [selectedTeam, setSelectedTeam] = useState<Team | null>(null)
+  const [currentRoomTeam, setCurrentRoomTeam] = useState<Team | null>(null)
   const [userMenuOpen, setUserMenuOpen] = useState(false)
   const [bindingPromptOpen, setBindingPromptOpen] = useState(!user.isFlorrVerified && user.florrBinding?.status !== 'pending' && !user.florrBinding?.resultUnread)
   const [echo] = useState(() => createEcho(user.reverbKey ?? 'movers-local-key'))
@@ -39,6 +41,9 @@ export function DashboardPage({ user, onUserUpdated, onLogout }: DashboardPagePr
   const teamsRef = useRef<Team[]>([])
   const teamsRequestRef = useRef(0)
   const teamsRevisionRef = useRef(0)
+  const hasTeamSnapshotRef = useRef(false)
+  const notificationKeysRef = useRef(new Map<string, number>())
+  const syncInFlightRef = useRef(false)
 
   useEffect(() => { teamsRef.current = teams }, [teams])
 
@@ -53,6 +58,16 @@ export function DashboardPage({ user, onUserUpdated, onLogout }: DashboardPagePr
     updateTeams(update)
   }, [updateTeams])
 
+  const notifyOnce = useCallback((key: string, notify: () => void) => {
+    const now = Date.now()
+    for (const [storedKey, storedAt] of notificationKeysRef.current) {
+      if (now - storedAt > 300_000) notificationKeysRef.current.delete(storedKey)
+    }
+    if (notificationKeysRef.current.has(key)) return
+    notificationKeysRef.current.set(key, now)
+    notify()
+  }, [])
+
   useEffect(() => {
     if (!userMenuOpen) return
     const closeOnEscape = (event: KeyboardEvent) => { if (event.key === 'Escape') setUserMenuOpen(false) }
@@ -65,7 +80,7 @@ export function DashboardPage({ user, onUserUpdated, onLogout }: DashboardPagePr
   const loadTeams = useCallback(async (silent = false) => {
     await Promise.resolve()
     if (!silent) setLoading(true)
-    setError('')
+    if (!silent) setError('')
     const requestId = ++teamsRequestRef.current
     const revision = teamsRevisionRef.current
     try {
@@ -77,39 +92,64 @@ export function DashboardPage({ user, onUserUpdated, onLogout }: DashboardPagePr
         setError('服务器返回的队伍数据格式不正确，请刷新重试。')
         return
       }
-      for (const nextTeam of nextTeams) {
-        const previousTeam = teamsRef.current.find((team) => team.id === nextTeam.id)
-        const userWasMember = previousTeam?.members.some((member) => member.id === user.id) ?? false
-        if (!userWasMember || !nextTeam.members.some((member) => member.id === user.id)) continue
-        for (const joinedUser of nextTeam.members) {
-          if (previousTeam?.members.some((member) => member.id === joinedUser.id)) continue
-          showJoinNotification({
-            team: { id: nextTeam.id, gameName: nextTeam.gameName },
-            joinedUser,
-            joinedAt: new Date().toISOString(),
-          }, user.id)
+      if (hasTeamSnapshotRef.current) {
+        for (const nextTeam of nextTeams) {
+          const previousTeam = teamsRef.current.find((team) => team.id === nextTeam.id)
+          if (!previousTeam) {
+            if (nextTeam.owner.id !== user.id) notifyOnce(`created:${nextTeam.id}`, () => showTeamCreatedNotification({ teamId: nextTeam.id, team: nextTeam }, notificationSettings))
+            continue
+          }
+          const userWasMember = previousTeam.members.some((member) => member.id === user.id)
+          const userIsMember = nextTeam.members.some((member) => member.id === user.id)
+          if (!userWasMember || !userIsMember) continue
+          for (const joinedUser of nextTeam.members) {
+            if (previousTeam.members.some((member) => member.id === joinedUser.id)) continue
+            notifyOnce(`joined:${nextTeam.id}:${joinedUser.id}`, () => showJoinNotification({
+              team: { id: nextTeam.id, gameName: nextTeam.gameName },
+              joinedUser,
+              joinedAt: new Date().toISOString(),
+            }, user.id, notificationSettings))
+          }
+          for (const leftUser of previousTeam.members) {
+            if (nextTeam.members.some((member) => member.id === leftUser.id) || leftUser.id === user.id) continue
+            notifyOnce(`left:${nextTeam.id}:${leftUser.id}`, () => showMemberLeftNotification({ teamId: nextTeam.id, user: leftUser, leftAt: new Date().toISOString() }, notificationSettings))
+          }
         }
       }
       updateTeams(() => nextTeams)
+      hasTeamSnapshotRef.current = true
     } catch (requestError) {
-      if (requestId === teamsRequestRef.current && revision === teamsRevisionRef.current) {
+      if (!silent && requestId === teamsRequestRef.current && revision === teamsRevisionRef.current) {
         setError(getErrorMessage(requestError))
       }
     } finally {
       if (!silent) setLoading(false)
     }
-  }, [updateTeams, user.id])
+  }, [notificationSettings, notifyOnce, updateTeams, user.id])
 
   const checkCurrentTeam = useCallback(async () => {
     const { data } = await api.get<{ data: Team | null }>('/teams/current')
-    if (!data.data?.isAssembled) return false
-    showTeamAssembledNotification({
-      team: { id: data.data.id, gameName: data.data.gameName },
-      assembledAt: data.data.assembledAt ?? new Date().toISOString(),
-    })
-    navigate(`/teams/${data.data.id}/room`, { replace: true })
+    const team = data.data
+    if (!team?.isAssembled) return false
+    if (new URLSearchParams(location.search).has('room')) {
+      setCurrentRoomTeam(team)
+      return false
+    }
+    const assembledAt = team.assembledAt ?? new Date().toISOString()
+    notifyOnce(`assembled:${team.id}`, () => showTeamAssembledNotification({ team: { id: team.id, gameName: team.gameName }, assembledAt }, notificationSettings))
+    navigate(`/teams/${team.id}/room`, { replace: true })
     return true
-  }, [navigate])
+  }, [location.search, navigate, notificationSettings, notifyOnce])
+
+  const synchronize = useCallback(async () => {
+    if (syncInFlightRef.current) return
+    syncInFlightRef.current = true
+    try {
+      await Promise.allSettled([loadTeams(true), checkCurrentTeam()])
+    } finally {
+      syncInFlightRef.current = false
+    }
+  }, [checkCurrentTeam, loadTeams])
 
   // Loading remote team state is the synchronization this effect owns.
   // oxlint-disable-next-line react/set-state-in-effect
@@ -124,19 +164,49 @@ export function DashboardPage({ user, onUserUpdated, onLogout }: DashboardPagePr
   useEffect(() => keepEchoConnection(echo), [echo])
 
   useEffect(() => {
-    const sync = () => {
-      void loadTeams(true)
-      void checkCurrentTeam().catch(() => undefined)
+    let worker: Worker | null = null
+    let fallbackInterval: number | null = null
+    const stopFallback = () => {
+      if (fallbackInterval !== null) window.clearInterval(fallbackInterval)
+      fallbackInterval = null
     }
-    const interval = window.setInterval(sync, realtimeConnected ? 30_000 : 5_000)
-    window.addEventListener('focus', sync)
-    document.addEventListener('visibilitychange', sync)
+    const handleVisibility = () => {
+      if (document.visibilityState === 'hidden') {
+        if (worker) {
+          worker.postMessage({ type: 'start' })
+          worker.postMessage({ type: 'sync-now' })
+        } else if (fallbackInterval === null) {
+          void synchronize()
+          fallbackInterval = window.setInterval(() => void synchronize(), 5000)
+        }
+        return
+      }
+      worker?.postMessage({ type: 'stop' })
+      stopFallback()
+      void synchronize()
+    }
+    if ('Worker' in window) {
+      worker = new Worker('/background-sync-worker.js')
+      worker.addEventListener('message', (event) => { if (event.data?.type === 'sync') void synchronize() })
+    }
+    document.addEventListener('visibilitychange', handleVisibility)
+    window.addEventListener('focus', handleVisibility)
+    handleVisibility()
     return () => {
-      window.clearInterval(interval)
-      window.removeEventListener('focus', sync)
-      document.removeEventListener('visibilitychange', sync)
+      worker?.postMessage({ type: 'stop' })
+      worker?.terminate()
+      stopFallback()
+      document.removeEventListener('visibilitychange', handleVisibility)
+      window.removeEventListener('focus', handleVisibility)
     }
-  }, [checkCurrentTeam, loadTeams, realtimeConnected])
+  }, [synchronize])
+
+  useEffect(() => {
+    const interval = window.setInterval(() => {
+      if (document.visibilityState === 'visible') void synchronize()
+    }, realtimeConnected ? 30_000 : 5_000)
+    return () => window.clearInterval(interval)
+  }, [realtimeConnected, synchronize])
 
   useEffect(() => {
     echo.private(`user.${user.id}`).listen('.FlorrBindingReviewed', (_event: FlorrBindingReviewedEvent) => {
@@ -150,11 +220,11 @@ export function DashboardPage({ user, onUserUpdated, onLogout }: DashboardPagePr
     // Subscribe once for the recruitment hall. Team events are public because
     // the hall itself is public; this keeps every user's cards synchronized.
     const channel = echo.private('teams')
-    channel.listen('.TeamCreated', (event: TeamCreatedEvent) => { if (event.team?.owner?.id !== user.id) showTeamCreatedNotification(event, notificationSettings); void loadTeams(true) })
+    channel.listen('.TeamCreated', (event: TeamCreatedEvent) => { if (event.team?.owner?.id !== user.id) notifyOnce(`created:${event.teamId}`, () => showTeamCreatedNotification(event, notificationSettings)); void loadTeams(true) })
     channel.listen('.TeamMemberJoined', (event: TeamMemberJoinedEvent) => {
       const currentTeam = teamsRef.current.find((team) => team.id === event.team.id)
       const isCurrentMember = currentTeam?.members.some((member) => member.id === user.id) ?? false
-      if (isCurrentMember && event.joinedUser.id !== user.id) showJoinNotification(event, user.id, notificationSettings)
+      if (isCurrentMember && event.joinedUser.id !== user.id) notifyOnce(`joined:${event.team.id}:${event.joinedUser.id}`, () => showJoinNotification(event, user.id, notificationSettings))
       updateTeamsFromEvent((current) => current.flatMap((team) => {
         if (team.id !== event.team.id) return [team]
         if (event.isAssembled) return []
@@ -165,7 +235,7 @@ export function DashboardPage({ user, onUserUpdated, onLogout }: DashboardPagePr
       }))
       if (event.isAssembled && isCurrentMember) {
         const assembledEvent: TeamAssembledEvent = { team: event.team, assembledAt: event.joinedAt }
-        showTeamAssembledNotification(assembledEvent, notificationSettings)
+        notifyOnce(`assembled:${event.team.id}`, () => showTeamAssembledNotification(assembledEvent, notificationSettings))
         navigate(`/teams/${event.team.id}/room`)
         return
       }
@@ -175,13 +245,13 @@ export function DashboardPage({ user, onUserUpdated, onLogout }: DashboardPagePr
       const currentTeam = teamsRef.current.find((team) => team.id === event.team.id)
       updateTeamsFromEvent((current) => current.filter((team) => team.id !== event.team.id))
       if (currentTeam?.members.some((member) => member.id === user.id)) {
-        showTeamAssembledNotification(event, notificationSettings)
+        notifyOnce(`assembled:${event.team.id}`, () => showTeamAssembledNotification(event, notificationSettings))
         navigate(`/teams/${event.team.id}/room`)
       }
     })
     channel.listen('.TeamMemberLeft', (event: TeamMemberLeftEvent) => {
       const currentTeam = teamsRef.current.find((team) => team.id === event.teamId)
-      if (currentTeam?.members.some((member) => member.id === user.id) && event.user.id !== user.id) showMemberLeftNotification(event, notificationSettings)
+      if (currentTeam?.members.some((member) => member.id === user.id) && event.user.id !== user.id) notifyOnce(`left:${event.teamId}:${event.user.id}`, () => showMemberLeftNotification(event, notificationSettings))
       updateTeamsFromEvent((current) => current.map((team) => {
         if (team.id !== event.teamId) return team
         const members = team.members.filter((member) => member.id !== event.user.id)
@@ -192,7 +262,7 @@ export function DashboardPage({ user, onUserUpdated, onLogout }: DashboardPagePr
       updateTeamsFromEvent((current) => current.filter((team) => team.id !== event.teamId))
     })
     return () => { echo.leave('teams') }
-  }, [echo, user.id, loadTeams, navigate, updateTeamsFromEvent, notificationSettings])
+  }, [echo, user.id, loadTeams, navigate, notificationSettings, notifyOnce, updateTeamsFromEvent])
 
   const enableNotifications = async () => {
     setNotificationState(await requestNotificationPermission())
@@ -207,7 +277,7 @@ export function DashboardPage({ user, onUserUpdated, onLogout }: DashboardPagePr
         const { data } = await api.post<{ data: Team }>(`/teams/${team.id}/join`)
         if (data.data.isAssembled) {
           const event = { team: { id: data.data.id, gameName: data.data.gameName }, assembledAt: data.data.assembledAt ?? new Date().toISOString() }
-          showTeamAssembledNotification(event)
+          notifyOnce(`assembled:${data.data.id}`, () => showTeamAssembledNotification(event, notificationSettings))
           navigate(`/teams/${team.id}/room`)
           return
         }
@@ -224,12 +294,8 @@ export function DashboardPage({ user, onUserUpdated, onLogout }: DashboardPagePr
 
   const openCreate = () => {
     if (!user.isFlorrVerified) { setBindingPromptOpen(true); return }
-    if (teams.some((team) => team.owner.id === user.id)) {
-      setReplaceConfirmOpen(true)
-      return
-    }
     if (teams.some((team) => team.members.some((member) => member.id === user.id))) {
-      setError('你已经加入了其他队长的招募，请先退出当前队伍。')
+      setReplaceConfirmOpen(true)
       return
     }
     setReplaceCurrentTeam(false)
@@ -283,6 +349,7 @@ export function DashboardPage({ user, onUserUpdated, onLogout }: DashboardPagePr
       </header>
 
       <main>
+        {currentRoomTeam && <section className="current-room-banner" role="status"><div><strong>你正在 {currentRoomTeam.gameName} 房间中</strong><span>可以返回大厅浏览其他招募，房间成员和聊天会继续保留。</span></div><button className="button-primary" type="button" onClick={() => navigate(`/teams/${currentRoomTeam.id}/room`)}>重新进入房间</button></section>}
         <section className="dashboard-heading">
           <div><h1>MOV组队大厅</h1><p>Any squad?Any hunt?Any bonus?</p></div>
           <button className="button-primary create-button" type="button" onClick={openCreate}><Plus size={19} />发布招募</button>
@@ -315,7 +382,7 @@ export function DashboardPage({ user, onUserUpdated, onLogout }: DashboardPagePr
         </section>
       </main>
 
-      <CreateTeamForm open={createOpen} replaceCurrentTeam={replaceCurrentTeam} onClose={() => { setCreateOpen(false); setReplaceCurrentTeam(false) }} onCreated={(team) => { updateTeamsFromEvent((current) => [team, ...current.filter((item) => item.id !== team.id && (!replaceCurrentTeam || item.owner.id !== user.id))]); setCreateOpen(false); setReplaceCurrentTeam(false) }} />
+      <CreateTeamForm open={createOpen} replaceCurrentTeam={replaceCurrentTeam} onClose={() => { setCreateOpen(false); setReplaceCurrentTeam(false) }} onCreated={(team) => { updateTeamsFromEvent((current) => [team, ...current.filter((item) => item.id !== team.id && (!replaceCurrentTeam || !item.members.some((member) => member.id === user.id)))]); setCurrentRoomTeam(null); setCreateOpen(false); setReplaceCurrentTeam(false) }} />
       <ProfileSettings user={{ ...user, level: user.level ?? 1 }} open={profileOpen} onClose={() => setProfileOpen(false)} onSaved={onUserUpdated} />
       <NotificationSettingsPanel user={user} open={notificationSettingsOpen} onClose={() => setNotificationSettingsOpen(false)} onSaved={onUserUpdated} />
       <TeamDetailsDrawer team={selectedTeam} currentUser={user} onClose={() => setSelectedTeam(null)} onEnterRoom={(team) => navigate(`/teams/${team.id}/room`)} />

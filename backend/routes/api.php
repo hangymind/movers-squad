@@ -6,6 +6,7 @@ use App\Http\Controllers\TeamMessageController;
 use App\Http\Controllers\TeamVoiceController;
 use App\Http\Controllers\AdminUserController;
 use App\Http\Controllers\AdminFlorrBindingController;
+use App\Http\Controllers\AdminTeamController;
 use App\Http\Controllers\FlorrBindingController;
 use App\Http\Resources\UserResource;
 use Illuminate\Http\Request;
@@ -43,6 +44,7 @@ Route::middleware('auth:sanctum')->group(function (): void {
             Route::get('/florr-bindings/pending-count', [AdminFlorrBindingController::class, 'pendingCount']);
             Route::get('/florr-bindings/{application}/image', [AdminFlorrBindingController::class, 'image']);
             Route::get('/florr-images', [AdminFlorrBindingController::class, 'images']);
+            Route::get('/teams', [AdminTeamController::class, 'index']);
         });
         Route::middleware('throttle:admin-write')->group(function (): void {
             Route::post('/users/{user}/ban', [AdminUserController::class, 'ban']);
@@ -53,6 +55,8 @@ Route::middleware('auth:sanctum')->group(function (): void {
             Route::post('/florr-bindings/{application}/reject', [AdminFlorrBindingController::class, 'reject']);
             Route::delete('/florr-images/{application}', [AdminFlorrBindingController::class, 'destroyImage']);
             Route::delete('/florr-images', [AdminFlorrBindingController::class, 'destroyImages']);
+            Route::post('/teams/{team}/close', [AdminTeamController::class, 'close']);
+            Route::delete('/teams/{team}', [AdminTeamController::class, 'destroy']);
         });
     });
 });
