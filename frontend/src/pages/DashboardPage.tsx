@@ -7,7 +7,7 @@ import { TeamCard } from '../components/TeamCard'
 import { TeamDetailsDrawer } from '../components/TeamDetailsDrawer'
 import { ProfileSettings } from '../components/ProfileSettings'
 import { api, getErrorMessage } from '../lib/api'
-import { createEcho, observeEchoConnection } from '../lib/echo'
+import { createEcho, keepEchoConnection, observeEchoConnection } from '../lib/echo'
 import { requestNotificationPermission, showJoinNotification, showMemberLeftNotification, showTeamAssembledNotification, showTeamCreatedNotification } from '../lib/notifications'
 import { NotificationSettingsPanel } from '../components/NotificationSettingsPanel'
 import { parseTeamListResponse } from '../lib/teamListResponse'
@@ -121,6 +121,7 @@ export function DashboardPage({ user, onUserUpdated, onLogout }: DashboardPagePr
   useEffect(() => () => echo.disconnect(), [echo])
 
   useEffect(() => observeEchoConnection(echo, setRealtimeConnected), [echo])
+  useEffect(() => keepEchoConnection(echo), [echo])
 
   useEffect(() => {
     const sync = () => {
@@ -317,7 +318,7 @@ export function DashboardPage({ user, onUserUpdated, onLogout }: DashboardPagePr
       <CreateTeamForm open={createOpen} replaceCurrentTeam={replaceCurrentTeam} onClose={() => { setCreateOpen(false); setReplaceCurrentTeam(false) }} onCreated={(team) => { updateTeamsFromEvent((current) => [team, ...current.filter((item) => item.id !== team.id && (!replaceCurrentTeam || item.owner.id !== user.id))]); setCreateOpen(false); setReplaceCurrentTeam(false) }} />
       <ProfileSettings user={{ ...user, level: user.level ?? 1 }} open={profileOpen} onClose={() => setProfileOpen(false)} onSaved={onUserUpdated} />
       <NotificationSettingsPanel user={user} open={notificationSettingsOpen} onClose={() => setNotificationSettingsOpen(false)} onSaved={onUserUpdated} />
-      <TeamDetailsDrawer team={selectedTeam} onClose={() => setSelectedTeam(null)} />
+      <TeamDetailsDrawer team={selectedTeam} currentUser={user} onClose={() => setSelectedTeam(null)} onEnterRoom={(team) => navigate(`/teams/${team.id}/room`)} />
       <ErrorDialog message={error} onClose={() => setError('')} />
       {replaceConfirmOpen && <div className="modal-backdrop"><section className="modal" role="alertdialog" aria-modal="true" aria-labelledby="replace-team-title"><span className="section-icon"><AlertTriangle size={20} /></span><h2 id="replace-team-title">替换当前招募？</h2><p>新招募发布成功后，当前正在招人的队伍会自动关闭，原队伍成员也会退出该招募。</p><div className="modal-actions"><button className="button-secondary" type="button" onClick={() => setReplaceConfirmOpen(false)}>取消</button><button className="button-danger" type="button" onClick={confirmReplace}>确认并继续</button></div></section></div>}
       {bindingPromptOpen && <div className="modal-backdrop"><section className="modal binding-prompt" role="dialog" aria-modal="true" aria-labelledby="binding-prompt-title"><span className="section-icon"><Link2 size={20} /></span><h2 id="binding-prompt-title">绑定 Florr 账户</h2><p>完成游戏账户验证后，才能发布招募或加入队伍。</p><div className="modal-actions"><button className="button-secondary" type="button" onClick={() => setBindingPromptOpen(false)}>暂时忽略</button><button className="button-primary" type="button" onClick={() => navigate('/bind-florr')}>去绑定</button></div></section></div>}

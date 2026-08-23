@@ -66,3 +66,17 @@ export function observeEchoConnection(echo: ReturnType<typeof createEcho>, liste
 
   return () => { connection.unbind('state_change', handleStateChange) }
 }
+
+export function keepEchoConnection(echo: ReturnType<typeof createEcho>) {
+  const reconnect = () => {
+    const connection = echo.connector.pusher.connection
+    if (connection.state === 'disconnected' || connection.state === 'unavailable') connection.connect()
+  }
+  document.addEventListener('visibilitychange', reconnect)
+  window.addEventListener('focus', reconnect)
+  reconnect()
+  return () => {
+    document.removeEventListener('visibilitychange', reconnect)
+    window.removeEventListener('focus', reconnect)
+  }
+}

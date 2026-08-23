@@ -5,7 +5,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { Avatar } from '../components/Avatar'
 import { ErrorDialog } from '../components/ErrorDialog'
 import { api, getErrorMessage } from '../lib/api'
-import { createEcho, observeEchoConnection } from '../lib/echo'
+import { createEcho, keepEchoConnection, observeEchoConnection } from '../lib/echo'
 import type { MessagePage, Team, TeamClosedEvent, TeamMemberLeftEvent, TeamMessage, TeamMessageCreatedEvent, User, VoiceCredentials } from '../types'
 
 interface TeamRoomPageProps { user: User; onLogout: () => Promise<void> }
@@ -42,7 +42,6 @@ export function TeamRoomPage({ user, onLogout }: TeamRoomPageProps) {
   const loadTeam = useCallback(async () => {
     try {
       const { data } = await api.get<{ data: Team }>(`/teams/${teamId}`)
-      if (!data.data.isAssembled) { navigate('/', { replace: true }); return }
       setTeam(data.data)
     } catch {
       navigate('/', { replace: true })
@@ -82,6 +81,7 @@ export function TeamRoomPage({ user, onLogout }: TeamRoomPageProps) {
     return () => { echo.leave(`team.${teamId}`); echo.disconnect() }
   }, [echo, loadTeam, navigate, teamId, user.id])
   useEffect(() => observeEchoConnection(echo, setRealtimeConnected), [echo])
+  useEffect(() => keepEchoConnection(echo), [echo])
 
   useEffect(() => {
     const list = messageListRef.current
@@ -212,7 +212,7 @@ export function TeamRoomPage({ user, onLogout }: TeamRoomPageProps) {
     {!realtimeConnected && <div className="modal-backdrop realtime-overlay"><section className="modal" role="alertdialog" aria-modal="true"><h2>实时连接已断开</h2><p>队伍和聊天状态可能无法实时同步。</p><button className="button-primary" type="button" onClick={() => window.location.reload()}>重试连接</button></section></div>}
     <header className="room-topbar">
       <div className="brand-lockup"><span>Movers Squad</span><small>队伍房间</small></div>
-      <div className="room-topbar-actions"><span className="room-status"><i />已成队</span><button className="button-secondary" type="button" onClick={() => void onLogout()}><LogOut size={16} />退出登录</button></div>
+      <div className="room-topbar-actions"><span className="room-status"><i />{team.isAssembled ? '已成队' : '等待队友'}</span><button className="button-secondary" type="button" onClick={() => void onLogout()}><LogOut size={16} />退出登录</button></div>
     </header>
 
     <main className="room-shell">
@@ -240,7 +240,7 @@ export function TeamRoomPage({ user, onLogout }: TeamRoomPageProps) {
           const member = memberByIdentity.get(participant.identity)
           return <div className={activeSpeakers.has(participant.identity) ? 'is-speaking' : ''} key={participant.identity}>{member ? <Avatar user={member} size="sm" /> : <span className="voice-avatar" /> }<span>{participant.name || member?.florrId || participant.identity}</span></div>
         })}</div>
-        <div className="voice-controls">{voiceState === 'connected' || voiceState === 'reconnecting' ? <><button className="icon-button" type="button" onClick={() => void toggleMic()} title={micMuted ? '解除静音' : '麦克风静音'}>{micMuted ? <MicOff size={18} /> : <Mic size={18} />}</button><button className="icon-button" type="button" onClick={toggleRemoteAudio} title={remoteMuted ? '恢复队友声音' : '静音队友声音'}>{remoteMuted ? <HeadphoneOff size={18} /> : <Headphones size={18} />}</button><button className="voice-leave" type="button" onClick={leaveVoice} title="退出语音"><PhoneOff size={18} /></button></> : <button className="button-primary voice-join" type="button" disabled={voiceState === 'connecting'} onClick={() => void joinVoice()}><Phone size={18} />{voiceState === 'connecting' ? '连接中...' : '加入语音'}</button>}</div>
+        <div className="voice-controls">{voiceState === 'connected' || voiceState === 'reconnecting' ? <><button className="icon-button" type="button" onClick={() => void toggleMic()} title={micMuted ? '解除静音' : '麦克风静音'}>{micMuted ? <MicOff size={18} /> : <Mic size={18} />}</button><button className="icon-button" type="button" onClick={toggleRemoteAudio} title={remoteMuted ? '恢复队友声音' : '静音队友声音'}>{remoteMuted ? <HeadphoneOff size={18} /> : <Headphones size={18} />}</button><button className="voice-leave" type="button" onClick={leaveVoice} title="退出语音"><PhoneOff size={18} /></button></> : <button className="button-primary voice-join" type="button" disabled={voiceState === 'connecting' || !team.isAssembled} onClick={() => void joinVoice()}><Phone size={18} />{!team.isAssembled ? '成队后可加入语音' : voiceState === 'connecting' ? '连接中...' : '加入语音'}</button>}</div>
       </section>
     </main>
     <div ref={audioContainerRef} className="remote-audio" aria-hidden="true" />

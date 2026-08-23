@@ -18,6 +18,7 @@ vi.mock('../lib/api', () => ({
 
 vi.mock('../lib/echo', () => ({
   createEcho: () => ({ private: () => mocks.channel, leave: vi.fn(), disconnect: vi.fn() }),
+  keepEchoConnection: () => () => undefined,
   observeEchoConnection: (_echo: unknown, listener: (connected: boolean) => void) => {
     listener(true)
     return () => undefined

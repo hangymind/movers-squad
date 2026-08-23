@@ -77,7 +77,6 @@ class TeamMessageController extends Controller
         return Team::query()
             ->whereKey($teamId)
             ->whereNull('closed_at')
-            ->whereNotNull('assembled_at')
             ->whereHas('members', fn ($query) => $query->whereKey($request->user()->id))
             ->firstOrFail();
     }
