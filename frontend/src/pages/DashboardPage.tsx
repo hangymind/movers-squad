@@ -9,6 +9,7 @@ import { ProfileSettings } from '../components/ProfileSettings'
 import { api, getErrorMessage } from '../lib/api'
 import { createEcho } from '../lib/echo'
 import { requestNotificationPermissionOnEntry, showJoinNotification, showTeamAssembledNotification } from '../lib/notifications'
+import { parseTeamListResponse } from '../lib/teamListResponse'
 import type { FlorrBindingReviewedEvent, Team, TeamAssembledEvent, TeamClosedEvent, TeamMemberJoinedEvent, TeamMemberLeftEvent, User } from '../types'
 import { ErrorDialog } from '../components/ErrorDialog'
 
@@ -50,8 +51,13 @@ export function DashboardPage({ user, onUserUpdated, onLogout }: DashboardPagePr
     if (!silent) setLoading(true)
     setError('')
     try {
-      const { data } = await api.get<{ data: Team[] }>('/teams')
-      setTeams(data.data)
+      const { data } = await api.get<unknown>('/teams')
+      const nextTeams = parseTeamListResponse(data)
+      if (nextTeams === null) {
+        setError('服务器返回的队伍数据格式不正确，请刷新重试。')
+        return
+      }
+      setTeams(nextTeams)
     } catch (requestError) {
       setError(getErrorMessage(requestError))
     } finally {

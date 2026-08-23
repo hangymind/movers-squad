@@ -12,7 +12,6 @@ use App\Models\User;
 use App\Services\LiveKitRoomManager;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Support\Facades\DB;
 use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
 use Symfony\Component\HttpKernel\Exception\UnprocessableEntityHttpException;
@@ -22,7 +21,7 @@ class TeamController extends Controller
 {
     public function __construct(private readonly LiveKitRoomManager $liveKit) {}
 
-    public function index(): AnonymousResourceCollection
+    public function index(): JsonResponse
     {
         $teams = Team::query()
             ->whereNull('closed_at')
@@ -32,7 +31,9 @@ class TeamController extends Controller
             ->latest()
             ->get();
 
-        return TeamResource::collection($teams);
+        return response()->json([
+            'data' => TeamResource::collection($teams)->resolve(),
+        ]);
     }
 
     public function current(Request $request): JsonResponse
