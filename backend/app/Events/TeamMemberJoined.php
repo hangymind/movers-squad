@@ -4,6 +4,7 @@ namespace App\Events;
 
 use App\Models\Team;
 use App\Models\User;
+use App\Rules\SafeAvatarUrl;
 use Illuminate\Broadcasting\InteractsWithSockets;
 use Illuminate\Broadcasting\PrivateChannel;
 use Illuminate\Contracts\Broadcasting\ShouldBroadcastNow;
@@ -41,7 +42,9 @@ class TeamMemberJoined implements ShouldBroadcastNow
             'joinedUser' => [
                 'id' => $this->joinedUser->id,
                 'florrId' => $this->joinedUser->florr_id,
-                'avatarUrl' => $this->joinedUser->avatar_url,
+                'level' => $this->joinedUser->level,
+                'isFlorrVerified' => $this->joinedUser->florr_verified_at !== null,
+                'avatarUrl' => SafeAvatarUrl::isValid($this->joinedUser->avatar_url) ? $this->joinedUser->avatar_url : null,
             ],
             'joinedAt' => now()->toISOString(),
             // Include the post-join state so clients cannot miss the assembled

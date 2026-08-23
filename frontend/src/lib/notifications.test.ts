@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { requestNotificationPermissionOnEntry, showJoinNotification, showTeamAssembledNotification } from './notifications'
+import { requestNotificationPermission, showJoinNotification, showTeamAssembledNotification } from './notifications'
 import type { TeamAssembledEvent, TeamMemberJoinedEvent } from '../types'
 
 const event: TeamMemberJoinedEvent = {
@@ -35,11 +35,19 @@ describe('showJoinNotification', () => {
     expect(notification).not.toHaveBeenCalled()
   })
 
-  it('requests notification permission automatically only once', async () => {
+  it('does not break realtime handling when the browser rejects notification construction', () => {
+    const failingNotification = vi.fn(() => { throw new Error('platform notification failure') })
+    Object.defineProperty(failingNotification, 'permission', { value: 'granted', configurable: true })
+    vi.stubGlobal('Notification', failingNotification)
+
+    expect(showJoinNotification(event, 1)).toBeNull()
+  })
+
+  it('coalesces simultaneous permission requests from the user action', async () => {
     Object.defineProperty(notification, 'permission', { value: 'default', configurable: true })
     const requestPermission = vi.fn().mockResolvedValue('granted')
     Object.defineProperty(notification, 'requestPermission', { value: requestPermission, configurable: true })
-    await Promise.all([requestNotificationPermissionOnEntry(), requestNotificationPermissionOnEntry()])
+    await Promise.all([requestNotificationPermission(), requestNotificationPermission()])
     expect(requestPermission).toHaveBeenCalledTimes(1)
   })
 

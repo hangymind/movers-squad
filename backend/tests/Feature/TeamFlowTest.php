@@ -2,6 +2,8 @@
 
 namespace Tests\Feature;
 
+use App\Events\TeamClosed;
+use App\Events\TeamCreated;
 use App\Events\TeamMemberJoined;
 use App\Models\Team;
 use App\Models\User;
@@ -37,6 +39,55 @@ class TeamFlowTest extends TestCase
             ->assertJsonPath('data.members.0.id', $owner->id)
             ->assertJsonPath('data.maxMembers', 4);
         $this->assertDatabaseHas('team_members', ['user_id' => $owner->id]);
+    }
+
+    public function test_owner_can_atomically_replace_an_active_recruitment(): void
+    {
+        Event::fake([TeamClosed::class, TeamCreated::class]);
+        [$oldTeam, $owner] = $this->createTeam();
+        $member = User::factory()->create();
+        $oldTeam->members()->attach($member, ['joined_at' => now()]);
+
+        $response = $this->actingAs($owner)->postJson('/api/teams', [
+            'note' => '新的招募',
+            'replaceCurrentTeam' => true,
+        ])->assertCreated();
+
+        $newTeamId = $response->json('data.id');
+        $this->assertNotNull($oldTeam->fresh()->closed_at);
+        $this->assertDatabaseHas('team_members', ['team_id' => $newTeamId, 'user_id' => $owner->id]);
+        $this->actingAs($member)->getJson('/api/teams')->assertJsonMissingPath('data.1');
+        Event::assertDispatched(TeamClosed::class, fn (TeamClosed $event) => $event->team->is($oldTeam));
+        Event::assertDispatched(TeamCreated::class, fn (TeamCreated $event) => $event->team->id === $newTeamId);
+    }
+
+    public function test_non_owner_cannot_replace_the_team_they_joined(): void
+    {
+        [$team] = $this->createTeam();
+        $member = User::factory()->create();
+        $team->members()->attach($member, ['joined_at' => now()]);
+
+        $this->actingAs($member)->postJson('/api/teams', ['replaceCurrentTeam' => true])
+            ->assertConflict();
+
+        $this->assertNull($team->fresh()->closed_at);
+        $this->assertDatabaseCount('teams', 1);
+    }
+
+    public function test_replacement_cleans_up_duplicate_active_recruitments_from_legacy_data(): void
+    {
+        Event::fake([TeamClosed::class, TeamCreated::class]);
+        [$firstTeam, $owner] = $this->createTeam();
+        $duplicateTeam = Team::create(['game_name' => 'Florr.io', 'owner_id' => $owner->id]);
+        $duplicateTeam->members()->attach($owner, ['joined_at' => now()]);
+
+        $this->actingAs($owner)->postJson('/api/teams', ['replaceCurrentTeam' => true])
+            ->assertCreated();
+
+        $this->assertNotNull($firstTeam->fresh()->closed_at);
+        $this->assertNotNull($duplicateTeam->fresh()->closed_at);
+        $this->actingAs($owner)->getJson('/api/teams')->assertJsonCount(1, 'data');
+        Event::assertDispatchedTimes(TeamClosed::class, 2);
     }
 
     public function test_user_can_join_and_event_contains_only_public_profile_data(): void

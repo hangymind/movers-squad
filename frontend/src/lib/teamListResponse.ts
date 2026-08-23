@@ -37,5 +37,5 @@ function isTeam(value: unknown): value is Team {
 
 export function parseTeamListResponse(payload: unknown): Team[] | null {
   const list = isRecord(payload) && 'data' in payload ? payload.data : payload
-  return Array.isArray(list) && list.every(isTeam) ? list : null
+  return Array.isArray(list) ? list.filter(isTeam) : null
 }

@@ -32,8 +32,11 @@ describe('parseTeamListResponse', () => {
     undefined,
     {},
     { data: undefined },
-    { data: [{ ...team, members: undefined }] },
   ])('rejects a malformed response without returning undefined', (payload) => {
     expect(parseTeamListResponse(payload)).toBeNull()
+  })
+
+  it('removes malformed teams while keeping valid recruitment data', () => {
+    expect(parseTeamListResponse({ data: [{ ...team, members: undefined }, team] })).toEqual([team])
   })
 })

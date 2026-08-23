@@ -6,11 +6,12 @@ import { ErrorDialog } from './ErrorDialog'
 
 interface CreateTeamFormProps {
   open: boolean
+  replaceCurrentTeam?: boolean
   onClose: () => void
   onCreated: (team: Team) => void
 }
 
-export function CreateTeamForm({ open, onClose, onCreated }: CreateTeamFormProps) {
+export function CreateTeamForm({ open, replaceCurrentTeam = false, onClose, onCreated }: CreateTeamFormProps) {
   const [note, setNote] = useState('')
   const [minLevel, setMinLevel] = useState('1')
   const [excludedIds, setExcludedIds] = useState('')
@@ -25,7 +26,7 @@ export function CreateTeamForm({ open, onClose, onCreated }: CreateTeamFormProps
     setSubmitting(true)
     try {
       const excludedFlorrIds = excludedIds.split(/[\n,]+/).map((id) => id.trim()).filter(Boolean)
-      const { data } = await api.post<{ data: Team }>('/teams', { note, minLevel: Number(minLevel), excludedFlorrIds })
+      const { data } = await api.post<{ data: Team }>('/teams', { note, minLevel: Number(minLevel), excludedFlorrIds, replaceCurrentTeam })
       setNote('')
       setMinLevel('1')
       setExcludedIds('')

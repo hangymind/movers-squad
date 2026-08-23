@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Events\TeamAssembled;
 use App\Events\TeamClosed;
+use App\Events\TeamCreated;
 use App\Events\TeamMemberJoined;
 use App\Events\TeamMemberLeft;
 use App\Http\Resources\TeamResource;
@@ -65,12 +66,35 @@ class TeamController extends Controller
             'minLevel' => ['nullable', 'integer', 'min:1', 'max:1000'],
             'excludedFlorrIds' => ['nullable', 'array', 'max:50'],
             'excludedFlorrIds.*' => ['string', 'max:64', 'regex:/^[\pL\pN_.:-]+$/u'],
+            'replaceCurrentTeam' => ['nullable', 'boolean'],
         ]);
         $excludedIds = collect($data['excludedFlorrIds'] ?? [])->map(fn (string $id) => trim($id))->filter()->unique()->values()->all();
 
-        $team = DB::transaction(function () use ($request, $data, $excludedIds): Team {
+        [$team, $replacedTeams] = DB::transaction(function () use ($request, $data, $excludedIds): array {
             $user = User::query()->lockForUpdate()->findOrFail($request->user()->id);
-            $this->ensureNoActiveTeam($user);
+            $activeTeams = Team::query()
+                ->whereNull('closed_at')
+                ->whereHas('members', fn ($query) => $query->whereKey($user->id))
+                ->orderBy('id')
+                ->lockForUpdate()
+                ->get();
+
+            if ($activeTeams->isNotEmpty()) {
+                if (! ($data['replaceCurrentTeam'] ?? false)) {
+                    throw new ConflictHttpException('你已经加入了一支未关闭的队伍。');
+                }
+                if ($activeTeams->contains(fn (Team $team): bool => $team->assembled_at !== null)) {
+                    throw new ConflictHttpException('已经成队的队伍不能替换招募。');
+                }
+                if ($activeTeams->contains(fn (Team $team): bool => $team->owner_id !== $user->id)) {
+                    throw new ConflictHttpException('只有当前招募的队长可以发起新招募。');
+                }
+
+                foreach ($activeTeams as $activeTeam) {
+                    $activeTeam->update(['closed_at' => now()]);
+                }
+            }
+
             $team = Team::create([
                 'game_name' => 'Florr.io',
                 'note' => isset($data['note']) && trim($data['note']) !== '' ? trim($data['note']) : null,
@@ -80,8 +104,13 @@ class TeamController extends Controller
             ]);
             $team->members()->attach($user->id, ['joined_at' => now()]);
 
-            return $team;
+            return [$team, $activeTeams];
         });
+
+        foreach ($replacedTeams as $replacedTeam) {
+            $this->broadcastSafely(new TeamClosed($replacedTeam));
+        }
+        $this->broadcastSafely(new TeamCreated($team));
 
         return (new TeamResource($this->loadTeam($team)))->response()->setStatusCode(201);
     }
@@ -228,6 +257,15 @@ class TeamController extends Controller
 
         if ($activeTeam !== null) {
             throw new ConflictHttpException('你已经加入了一支未关闭的队伍。');
+        }
+    }
+
+    private function broadcastSafely(object $event): void
+    {
+        try {
+            event($event);
+        } catch (Throwable $exception) {
+            report($exception);
         }
     }
 }

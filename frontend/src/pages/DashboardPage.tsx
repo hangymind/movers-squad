@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Bell, BellOff, CheckCircle2, ChevronDown, Clock3, Link2, LogOut, Plus, RefreshCw, ShieldCheck, UsersRound, UserCog, XCircle } from 'lucide-react'
+import { AlertTriangle, Bell, BellOff, CheckCircle2, ChevronDown, Clock3, Link2, LogOut, Plus, RefreshCw, ShieldCheck, UsersRound, UserCog, XCircle } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { Avatar } from '../components/Avatar'
 import { CreateTeamForm } from '../components/CreateTeamForm'
@@ -7,10 +7,10 @@ import { TeamCard } from '../components/TeamCard'
 import { TeamDetailsDrawer } from '../components/TeamDetailsDrawer'
 import { ProfileSettings } from '../components/ProfileSettings'
 import { api, getErrorMessage } from '../lib/api'
-import { createEcho } from '../lib/echo'
-import { requestNotificationPermissionOnEntry, showJoinNotification, showTeamAssembledNotification } from '../lib/notifications'
+import { createEcho, observeEchoConnection } from '../lib/echo'
+import { requestNotificationPermission, showJoinNotification, showTeamAssembledNotification } from '../lib/notifications'
 import { parseTeamListResponse } from '../lib/teamListResponse'
-import type { FlorrBindingReviewedEvent, Team, TeamAssembledEvent, TeamClosedEvent, TeamMemberJoinedEvent, TeamMemberLeftEvent, User } from '../types'
+import type { FlorrBindingReviewedEvent, Team, TeamAssembledEvent, TeamClosedEvent, TeamCreatedEvent, TeamMemberJoinedEvent, TeamMemberLeftEvent, User } from '../types'
 import { ErrorDialog } from '../components/ErrorDialog'
 
 interface DashboardPageProps { user: User; onUserUpdated: (user: User) => void; onLogout: () => Promise<void> }
@@ -22,6 +22,8 @@ export function DashboardPage({ user, onUserUpdated, onLogout }: DashboardPagePr
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [createOpen, setCreateOpen] = useState(false)
+  const [replaceConfirmOpen, setReplaceConfirmOpen] = useState(false)
+  const [replaceCurrentTeam, setReplaceCurrentTeam] = useState(false)
   const [busyTeamId, setBusyTeamId] = useState<number | null>(null)
   const [notificationState, setNotificationState] = useState<NotificationState>('Notification' in window ? Notification.permission : 'unsupported')
   const [profileOpen, setProfileOpen] = useState(false)
@@ -29,13 +31,23 @@ export function DashboardPage({ user, onUserUpdated, onLogout }: DashboardPagePr
   const [userMenuOpen, setUserMenuOpen] = useState(false)
   const [bindingPromptOpen, setBindingPromptOpen] = useState(!user.isFlorrVerified && user.florrBinding?.status !== 'pending' && !user.florrBinding?.resultUnread)
   const [echo] = useState(() => createEcho(user.reverbKey ?? 'movers-local-key'))
+  const [realtimeConnected, setRealtimeConnected] = useState(false)
   const teamsRef = useRef<Team[]>([])
+  const teamsRequestRef = useRef(0)
+  const teamsRevisionRef = useRef(0)
 
   useEffect(() => { teamsRef.current = teams }, [teams])
 
-  useEffect(() => {
-    void requestNotificationPermissionOnEntry().then(setNotificationState)
+  const updateTeams = useCallback((update: (current: Team[]) => Team[]) => {
+    const nextTeams = update(teamsRef.current)
+    teamsRef.current = nextTeams
+    setTeams(nextTeams)
   }, [])
+
+  const updateTeamsFromEvent = useCallback((update: (current: Team[]) => Team[]) => {
+    teamsRevisionRef.current += 1
+    updateTeams(update)
+  }, [updateTeams])
 
   useEffect(() => {
     if (!userMenuOpen) return
@@ -50,31 +62,77 @@ export function DashboardPage({ user, onUserUpdated, onLogout }: DashboardPagePr
     await Promise.resolve()
     if (!silent) setLoading(true)
     setError('')
+    const requestId = ++teamsRequestRef.current
+    const revision = teamsRevisionRef.current
     try {
       const { data } = await api.get<unknown>('/teams')
+      if (requestId !== teamsRequestRef.current || revision !== teamsRevisionRef.current) return
       const nextTeams = parseTeamListResponse(data)
       if (nextTeams === null) {
+        updateTeams(() => [])
         setError('服务器返回的队伍数据格式不正确，请刷新重试。')
         return
       }
-      setTeams(nextTeams)
+      for (const nextTeam of nextTeams) {
+        const previousTeam = teamsRef.current.find((team) => team.id === nextTeam.id)
+        const userWasMember = previousTeam?.members.some((member) => member.id === user.id) ?? false
+        if (!userWasMember || !nextTeam.members.some((member) => member.id === user.id)) continue
+        for (const joinedUser of nextTeam.members) {
+          if (previousTeam?.members.some((member) => member.id === joinedUser.id)) continue
+          showJoinNotification({
+            team: { id: nextTeam.id, gameName: nextTeam.gameName },
+            joinedUser,
+            joinedAt: new Date().toISOString(),
+          }, user.id)
+        }
+      }
+      updateTeams(() => nextTeams)
     } catch (requestError) {
-      setError(getErrorMessage(requestError))
+      if (requestId === teamsRequestRef.current && revision === teamsRevisionRef.current) {
+        setError(getErrorMessage(requestError))
+      }
     } finally {
       if (!silent) setLoading(false)
     }
-  }, [])
+  }, [updateTeams, user.id])
+
+  const checkCurrentTeam = useCallback(async () => {
+    const { data } = await api.get<{ data: Team | null }>('/teams/current')
+    if (!data.data?.isAssembled) return false
+    showTeamAssembledNotification({
+      team: { id: data.data.id, gameName: data.data.gameName },
+      assembledAt: data.data.assembledAt ?? new Date().toISOString(),
+    })
+    navigate(`/teams/${data.data.id}/room`, { replace: true })
+    return true
+  }, [navigate])
 
   // Loading remote team state is the synchronization this effect owns.
   // oxlint-disable-next-line react/set-state-in-effect
   useEffect(() => {
-    api.get<{ data: Team | null }>('/teams/current').then(({ data }) => {
-      if (data.data?.isAssembled) navigate(`/teams/${data.data.id}/room`, { replace: true })
-      else void loadTeams()
-    }).catch(() => void loadTeams())
-  }, [loadTeams, navigate])
+    checkCurrentTeam().then((assembled) => { if (!assembled) void loadTeams() })
+      .catch(() => void loadTeams())
+  }, [checkCurrentTeam, loadTeams])
 
   useEffect(() => () => echo.disconnect(), [echo])
+
+  useEffect(() => observeEchoConnection(echo, setRealtimeConnected), [echo])
+
+  useEffect(() => {
+    const sync = () => {
+      if (document.visibilityState !== 'visible') return
+      void loadTeams(true)
+      if (!realtimeConnected) void checkCurrentTeam().catch(() => undefined)
+    }
+    const interval = window.setInterval(sync, realtimeConnected ? 30_000 : 5_000)
+    window.addEventListener('focus', sync)
+    document.addEventListener('visibilitychange', sync)
+    return () => {
+      window.clearInterval(interval)
+      window.removeEventListener('focus', sync)
+      document.removeEventListener('visibilitychange', sync)
+    }
+  }, [checkCurrentTeam, loadTeams, realtimeConnected])
 
   useEffect(() => {
     echo.private(`user.${user.id}`).listen('.FlorrBindingReviewed', (_event: FlorrBindingReviewedEvent) => {
@@ -88,31 +146,50 @@ export function DashboardPage({ user, onUserUpdated, onLogout }: DashboardPagePr
     // Subscribe once for the recruitment hall. Team events are public because
     // the hall itself is public; this keeps every user's cards synchronized.
     const channel = echo.private('teams')
+    channel.listen('.TeamCreated', (_event: TeamCreatedEvent) => { void loadTeams(true) })
     channel.listen('.TeamMemberJoined', (event: TeamMemberJoinedEvent) => {
       const currentTeam = teamsRef.current.find((team) => team.id === event.team.id)
       const isCurrentMember = currentTeam?.members.some((member) => member.id === user.id) ?? false
       if (isCurrentMember && event.joinedUser.id !== user.id) showJoinNotification(event, user.id)
+      updateTeamsFromEvent((current) => current.flatMap((team) => {
+        if (team.id !== event.team.id) return [team]
+        if (event.isAssembled) return []
+        const members = team.members.some((member) => member.id === event.joinedUser.id)
+          ? team.members
+          : [...team.members, event.joinedUser]
+        return [{ ...team, members, memberCount: members.length, isFull: members.length >= team.maxMembers }]
+      }))
       if (event.isAssembled && isCurrentMember) {
         const assembledEvent: TeamAssembledEvent = { team: event.team, assembledAt: event.joinedAt }
         showTeamAssembledNotification(assembledEvent)
         navigate(`/teams/${event.team.id}/room`)
         return
       }
-      void loadTeams(true)
+      if (!currentTeam) void loadTeams(true)
     })
     channel.listen('.TeamAssembled', (event: TeamAssembledEvent) => {
       const currentTeam = teamsRef.current.find((team) => team.id === event.team.id)
-      if (!currentTeam?.members.some((member) => member.id === user.id)) return
-      showTeamAssembledNotification(event)
-      navigate(`/teams/${event.team.id}/room`)
+      updateTeamsFromEvent((current) => current.filter((team) => team.id !== event.team.id))
+      if (currentTeam?.members.some((member) => member.id === user.id)) {
+        showTeamAssembledNotification(event)
+        navigate(`/teams/${event.team.id}/room`)
+      }
     })
-    channel.listen('.TeamMemberLeft', (_event: TeamMemberLeftEvent) => { void loadTeams(true) })
-    channel.listen('.TeamClosed', (_event: TeamClosedEvent) => { void loadTeams(true) })
+    channel.listen('.TeamMemberLeft', (event: TeamMemberLeftEvent) => {
+      updateTeamsFromEvent((current) => current.map((team) => {
+        if (team.id !== event.teamId) return team
+        const members = team.members.filter((member) => member.id !== event.user.id)
+        return { ...team, members, memberCount: members.length, isFull: false }
+      }))
+    })
+    channel.listen('.TeamClosed', (event: TeamClosedEvent) => {
+      updateTeamsFromEvent((current) => current.filter((team) => team.id !== event.teamId))
+    })
     return () => { echo.leave('teams') }
-  }, [echo, user.id, loadTeams, navigate])
+  }, [echo, user.id, loadTeams, navigate, updateTeamsFromEvent])
 
   const enableNotifications = async () => {
-    setNotificationState(await requestNotificationPermissionOnEntry())
+    setNotificationState(await requestNotificationPermission())
   }
 
   const handleAction = async (team: Team, action: 'join' | 'leave' | 'close') => {
@@ -141,6 +218,21 @@ export function DashboardPage({ user, onUserUpdated, onLogout }: DashboardPagePr
 
   const openCreate = () => {
     if (!user.isFlorrVerified) { setBindingPromptOpen(true); return }
+    if (teams.some((team) => team.owner.id === user.id)) {
+      setReplaceConfirmOpen(true)
+      return
+    }
+    if (teams.some((team) => team.members.some((member) => member.id === user.id))) {
+      setError('你已经加入了其他队长的招募，请先退出当前队伍。')
+      return
+    }
+    setReplaceCurrentTeam(false)
+    setCreateOpen(true)
+  }
+
+  const confirmReplace = () => {
+    setReplaceConfirmOpen(false)
+    setReplaceCurrentTeam(true)
     setCreateOpen(true)
   }
 
@@ -216,10 +308,11 @@ export function DashboardPage({ user, onUserUpdated, onLogout }: DashboardPagePr
         </section>
       </main>
 
-      <CreateTeamForm open={createOpen} onClose={() => setCreateOpen(false)} onCreated={(team) => { setTeams((current) => [team, ...current]); setCreateOpen(false) }} />
+      <CreateTeamForm open={createOpen} replaceCurrentTeam={replaceCurrentTeam} onClose={() => { setCreateOpen(false); setReplaceCurrentTeam(false) }} onCreated={(team) => { updateTeamsFromEvent((current) => [team, ...current.filter((item) => item.id !== team.id && (!replaceCurrentTeam || item.owner.id !== user.id))]); setCreateOpen(false); setReplaceCurrentTeam(false) }} />
       <ProfileSettings user={{ ...user, level: user.level ?? 1 }} open={profileOpen} onClose={() => setProfileOpen(false)} onSaved={onUserUpdated} />
       <TeamDetailsDrawer team={selectedTeam} onClose={() => setSelectedTeam(null)} />
       <ErrorDialog message={error} onClose={() => setError('')} />
+      {replaceConfirmOpen && <div className="modal-backdrop"><section className="modal" role="alertdialog" aria-modal="true" aria-labelledby="replace-team-title"><span className="section-icon"><AlertTriangle size={20} /></span><h2 id="replace-team-title">替换当前招募？</h2><p>新招募发布成功后，当前正在招人的队伍会自动关闭，原队伍成员也会退出该招募。</p><div className="modal-actions"><button className="button-secondary" type="button" onClick={() => setReplaceConfirmOpen(false)}>取消</button><button className="button-danger" type="button" onClick={confirmReplace}>确认并继续</button></div></section></div>}
       {bindingPromptOpen && <div className="modal-backdrop"><section className="modal binding-prompt" role="dialog" aria-modal="true" aria-labelledby="binding-prompt-title"><span className="section-icon"><Link2 size={20} /></span><h2 id="binding-prompt-title">绑定 Florr 账户</h2><p>完成游戏账户验证后，才能发布招募或加入队伍。</p><div className="modal-actions"><button className="button-secondary" type="button" onClick={() => setBindingPromptOpen(false)}>暂时忽略</button><button className="button-primary" type="button" onClick={() => navigate('/bind-florr')}>去绑定</button></div></section></div>}
       {user.florrBinding?.resultUnread && <div className="modal-backdrop result-backdrop"><section className="modal binding-result" role="alertdialog" aria-modal="true">{user.florrBinding.status === 'approved' ? <><CheckCircle2 className="result-approved" size={43} /><h2>Florr 绑定已通过</h2><p>你的账户已完成验证，发布招募和加入队伍功能现已解锁。</p><button className="button-primary" type="button" onClick={() => void acknowledgeResult()}>知道了</button></> : <><XCircle className="result-rejected" size={43} /><h2>Florr 绑定未通过</h2><p className="rejection-copy">{user.florrBinding.rejectionReason}</p><div className="modal-actions"><button className="button-secondary" type="button" onClick={() => void acknowledgeResult()}>稍后处理</button><button className="button-primary" type="button" onClick={() => void reapply()}>重新申请</button></div></>}</section></div>}
       <footer className="site-footer dashboard-footer">©Movers 2026</footer>

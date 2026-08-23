@@ -8,7 +8,6 @@ import { BannedPage } from './pages/BannedPage'
 import { FlorrBindingPage } from './pages/FlorrBindingPage'
 import { AppLoading } from './components/AppLoading'
 import { BuildLabel } from './components/BuildLabel'
-import { requestNotificationPermissionOnEntry } from './lib/notifications'
 import type { User } from './types'
 import './App.css'
 
@@ -25,10 +24,6 @@ function App() {
       .catch(() => setUser(null))
       .finally(() => setLoading(false))
   }, [])
-
-  useEffect(() => {
-    if (user) void requestNotificationPermissionOnEntry()
-  }, [user])
 
   const handleAuthenticated = useCallback((nextUser: User) => {
     setUser(nextUser)

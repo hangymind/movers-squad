@@ -57,3 +57,12 @@ export function createEcho(key: string) {
     },
   })
 }
+
+export function observeEchoConnection(echo: ReturnType<typeof createEcho>, listener: (connected: boolean) => void) {
+  const connection = echo.connector.pusher.connection
+  const handleStateChange = ({ current }: { current: string }) => listener(current === 'connected')
+  connection.bind('state_change', handleStateChange)
+  listener(connection.state === 'connected')
+
+  return () => { connection.unbind('state_change', handleStateChange) }
+}
