@@ -47,6 +47,8 @@ REVERB_APP_MAX_CONNECTIONS=1000
 LIVEKIT_URL=wss://voice.你的域名
 LIVEKIT_API_KEY=语音服务器APIKey
 LIVEKIT_API_SECRET=至少32字节的语音服务器Secret
+GEO_HUNT_MAP_ROOT=/www/wwwroot/movers-squad/map
+GEO_HUNT_MAP_CACHE_STORE=file
 ```
 
 生成随机 `REVERB_APP_ID`、`REVERB_APP_KEY`、`REVERB_APP_SECRET`。这三项是 Reverb 识别和签名连接所必需的，不能删除；其中 Key 会由登录接口安全地作为公开连接标识返回，只有 Secret 必须严格保存在服务器。前端不再需要任何 `VITE_REVERB_*` 配置。然后执行：
@@ -57,11 +59,14 @@ php artisan migrate --force
 php artisan storage:link
 php artisan config:cache
 php artisan route:cache
+php artisan geo-hunt:warm-cache
 
 cd ../frontend
 npm ci
 npm run build
 ```
+
+图寻构建会把 `map/tiles` 中的 SVG 图块复制到 `frontend/dist/geo-hunt-assets/tiles`。部署仓库时必须保留根目录的 `map/maps`、`map/tiles` 和 `map/tileset.tsj`；Laravel 通过 `GEO_HUNT_MAP_ROOT` 读取地图，浏览器只读取构建后的图块资源。
 
 把 `frontend/dist` 的内容复制到 Laravel 的 `public` 目录（不会覆盖 `index.php`）：
 
@@ -91,6 +96,14 @@ add_header Content-Security-Policy "default-src 'self'; base-uri 'self'; form-ac
 
 location / {
     try_files $uri $uri/ /index.html;
+}
+
+# Map tiles are static and revalidated only once per day, keeping PHP out of the asset path.
+location ^~ /geo-hunt-assets/ {
+    expires 1d;
+    add_header Cache-Control "public, max-age=86400";
+    try_files $uri =404;
+    access_log off;
 }
 
 location ^~ /api/ {
@@ -173,6 +186,7 @@ php artisan migrate --force
 php artisan optimize:clear
 php artisan config:cache
 php artisan route:cache
+php artisan geo-hunt:warm-cache
 
 cd ../frontend
 npm ci

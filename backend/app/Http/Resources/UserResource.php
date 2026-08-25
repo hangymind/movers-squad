@@ -31,6 +31,21 @@ class UserResource extends JsonResource
                 'showMemberLeftNotifications' => (bool) $this->show_member_left_notifications,
                 'notificationSoundEnabled' => (bool) $this->notification_sound_enabled,
             ]),
+            'geoHuntProfile' => $this->when($isSelf, function (): array {
+                $profile = $this->geoHuntProfile()->firstOrCreate();
+                $floor = 50 * ($profile->level - 1) * $profile->level;
+                $next = 50 * $profile->level * ($profile->level + 1);
+
+                return [
+                    'level' => $profile->level,
+                    'experience' => $profile->experience,
+                    'experienceIntoLevel' => $profile->experience - $floor,
+                    'experienceForNextLevel' => $next - $floor,
+                    'wins' => $profile->wins,
+                    'losses' => $profile->losses,
+                    'matchesPlayed' => $profile->matches_played,
+                ];
+            }),
             'florrBinding' => $this->when($isSelf, fn () => [
                 'id' => $binding?->id,
                 'status' => $this->florr_verified_at !== null ? 'approved' : ($binding?->status ?? 'unbound'),

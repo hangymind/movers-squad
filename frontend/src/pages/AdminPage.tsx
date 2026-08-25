@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
-import { ArrowLeft, Ban, Check, CheckCircle2, DoorClosed, Images, KeyRound, Search, ShieldCheck, Trash2, UserCheck, Users, UsersRound, XCircle } from 'lucide-react'
+import { ArrowLeft, Ban, Check, CheckCircle2, DoorClosed, Gamepad2, Images, KeyRound, Search, ShieldCheck, Trash2, UserCheck, Users, UsersRound, XCircle } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { api, apiOrigin, getErrorMessage } from '../lib/api'
 import { ErrorDialog } from '../components/ErrorDialog'
-import type { FlorrBindingApplication, Team, User } from '../types'
+import type { FlorrBindingApplication, GeoHuntRoomSummary, Team, User } from '../types'
 
-type AdminTab = 'bindings' | 'users' | 'images' | 'teams'
+type AdminTab = 'bindings' | 'users' | 'images' | 'teams' | 'geoRooms'
 interface Paginated<T> { data: T[]; meta: { total: number; current_page: number; last_page: number } }
 const imageUrl = (id: number) => `${apiOrigin}/api/admin/florr-bindings/${id}/image`
 const formatDate = (value: string | null) => value ? new Date(value).toLocaleString('zh-CN') : '-'
@@ -17,6 +17,7 @@ export function AdminPage() {
   const [bindings, setBindings] = useState<FlorrBindingApplication[]>([])
   const [images, setImages] = useState<FlorrBindingApplication[]>([])
   const [teams, setTeams] = useState<Team[]>([])
+  const [geoRooms, setGeoRooms] = useState<GeoHuntRoomSummary[]>([])
   const [pendingCount, setPendingCount] = useState(0)
   const [bindingsPage, setBindingsPage] = useState(1)
   const [bindingsLastPage, setBindingsLastPage] = useState(1)
@@ -50,6 +51,10 @@ export function AdminPage() {
     try { const { data } = await api.get<{ data: Team[] }>('/admin/teams'); setTeams(data.data) }
     catch (requestError) { setError(getErrorMessage(requestError)) }
   }, [])
+  const loadGeoRooms = useCallback(async () => {
+    try { const { data } = await api.get<{ data: GeoHuntRoomSummary[] }>('/admin/geo-hunt/rooms'); setGeoRooms(data.data) }
+    catch (requestError) { setError(getErrorMessage(requestError)) }
+  }, [])
 
   // Loading the protected approval queue is the synchronization this effect owns.
   // oxlint-disable-next-line react/set-state-in-effect
@@ -60,6 +65,7 @@ export function AdminPage() {
     if (next === 'users' && users.length === 0) void loadUsers()
     if (next === 'images') void loadImages()
     if (next === 'teams') void loadTeams()
+    if (next === 'geoRooms') void loadGeoRooms()
   }
 
   const review = async (application: FlorrBindingApplication, action: 'approve' | 'reject', reason?: string) => {
@@ -107,12 +113,18 @@ export function AdminPage() {
     catch (requestError) { setError(getErrorMessage(requestError)) }
     finally { setBusyId(null) }
   }
+  const closeGeoRoom = async (room: GeoHuntRoomSummary) => {
+    setBusyId(room.id)
+    try { await api.post(`/admin/geo-hunt/rooms/${room.id}/close`); await loadGeoRooms() }
+    catch (requestError) { setError(getErrorMessage(requestError)) }
+    finally { setBusyId(null) }
+  }
   const allSelected = images.length > 0 && images.every((item) => selectedImages.includes(item.id))
 
   return <div className="admin-page">
     <header className="admin-header"><Link to="/" className="icon-button" title="返回大厅"><ArrowLeft size={19} /></Link><div><span className="eyebrow">MOVERS CONTROL</span><h1>管理后台</h1></div></header>
     <main className="admin-main">
-      <nav className="admin-tabs" aria-label="管理视图"><button className={tab === 'bindings' ? 'active' : ''} onClick={() => switchTab('bindings')}><UserCheck size={17} />绑定审批{pendingCount > 0 && <span>{pendingCount}</span>}</button><button className={tab === 'users' ? 'active' : ''} onClick={() => switchTab('users')}><Users size={17} />用户管理</button><button className={tab === 'teams' ? 'active' : ''} onClick={() => switchTab('teams')}><UsersRound size={17} />队伍管理</button><button className={tab === 'images' ? 'active' : ''} onClick={() => switchTab('images')}><Images size={17} />图片资源</button></nav>
+      <nav className="admin-tabs" aria-label="管理视图"><button className={tab === 'bindings' ? 'active' : ''} onClick={() => switchTab('bindings')}><UserCheck size={17} />绑定审批{pendingCount > 0 && <span>{pendingCount}</span>}</button><button className={tab === 'users' ? 'active' : ''} onClick={() => switchTab('users')}><Users size={17} />用户管理</button><button className={tab === 'teams' ? 'active' : ''} onClick={() => switchTab('teams')}><UsersRound size={17} />队伍管理</button><button className={tab === 'geoRooms' ? 'active' : ''} onClick={() => switchTab('geoRooms')}><Gamepad2 size={17} />图寻房间</button><button className={tab === 'images' ? 'active' : ''} onClick={() => switchTab('images')}><Images size={17} />图片资源</button></nav>
 
       {tab === 'bindings' && <section className="admin-panel"><div className="admin-panel-heading"><div><h2>待审批申请</h2><p>核对截图中的用户名、等级和背包内容。</p></div></div>{bindings.length === 0 ? <div className="admin-empty"><CheckCircle2 size={30} /><strong>没有待处理申请</strong></div> : <><div className="binding-review-list">{bindings.map((item) => <article className="binding-review-item" key={item.id}><button className="review-image" type="button" onClick={() => setLightbox(item)} title="查看完整截图"><img src={imageUrl(item.id)} alt={`${item.user?.florrId} 提交的游戏截图`} /></button><div className="review-details"><span className="review-status">等待审批</span><h3>{item.user?.florrId}</h3><dl><div><dt>用户 ID</dt><dd>#{item.user?.id}</dd></div><div><dt>提交时间</dt><dd>{formatDate(item.submittedAt)}</dd></div><div><dt>文件大小</dt><dd>{formatSize(item.screenshotSize)}</dd></div></dl><div className="review-actions"><button className="button-secondary reject-button" disabled={busyId === item.id} onClick={() => setRejecting(item)}><XCircle size={16} />拒绝</button><button className="button-primary" disabled={busyId === item.id} onClick={() => void review(item, 'approve')}><Check size={16} />{busyId === item.id ? '处理中...' : '通过'}</button></div></div></article>)}</div><Pagination page={bindingsPage} lastPage={bindingsLastPage} onPage={(page) => void loadPending(page)} /></>}</section>}
 
@@ -121,6 +133,7 @@ export function AdminPage() {
       {tab === 'teams' && <section className="admin-panel"><div className="admin-panel-heading"><div><h2>队伍管理</h2><p>管理招募队伍和已成队房间。关闭会通知当前成员并断开语音房间。</p></div><button className="button-secondary" type="button" onClick={() => void loadTeams()}>刷新</button></div>{teams.length === 0 ? <div className="admin-empty"><UsersRound size={30} /><strong>暂无队伍</strong></div> : <div className="admin-table-wrap"><table className="admin-table"><thead><tr><th>队伍</th><th>队长</th><th>人数</th><th>状态</th><th>创建时间</th><th>操作</th></tr></thead><tbody>{teams.map((team) => <tr key={team.id}><td><strong>{team.gameName}</strong>{team.note && <small className="admin-team-note">{team.note}</small>}</td><td>{team.owner.florrId}</td><td>{team.memberCount} / {team.maxMembers}</td><td><span className={`admin-status ${team.closedAt ? 'is-banned' : ''}`}>{team.closedAt ? '已关闭' : team.isAssembled ? '房间中' : '招募中'}</span></td><td>{formatDate(team.createdAt)}</td><td><div className="admin-actions">{!team.closedAt && <button type="button" disabled={busyId === team.id} onClick={() => void closeTeam(team)}><DoorClosed size={15} />关闭{team.isAssembled ? '房间' : '招募'}</button>}<button className="admin-delete-button" type="button" disabled={busyId === team.id} onClick={() => setDeleteTeam(team)}><Trash2 size={15} />删除组队</button></div></td></tr>)}</tbody></table></div>}</section>}
 
       {tab === 'images' && <section className="admin-panel"><div className="admin-panel-heading image-toolbar"><div><h2>图片资源</h2><p>{images.length} 张当前页截图</p></div><div><label className="select-all"><input type="checkbox" checked={allSelected} onChange={() => setSelectedImages(allSelected ? [] : images.map((item) => item.id))} />全选当前页</label><button className="button-danger" type="button" disabled={selectedImages.length === 0} onClick={() => void deleteSelected()}><Trash2 size={16} />批量删除 ({selectedImages.length})</button></div></div>{images.length === 0 ? <div className="admin-empty"><Images size={30} /><strong>暂无图片资源</strong></div> : <><div className="resource-grid">{images.map((item) => <article className={`resource-item ${selectedImages.includes(item.id) ? 'selected' : ''}`} key={item.id}><label className="resource-check"><input type="checkbox" checked={selectedImages.includes(item.id)} onChange={() => setSelectedImages((current) => current.includes(item.id) ? current.filter((id) => id !== item.id) : [...current, item.id])} /><span /></label><button className="resource-preview" type="button" onClick={() => setLightbox(item)}><img src={imageUrl(item.id)} alt="绑定截图" /></button><div><strong>{item.user?.florrId}</strong><span>用户 #{item.user?.id} · {formatSize(item.screenshotSize)}</span><small>通过于 {formatDate(item.reviewedAt)}</small></div><button className="icon-button resource-delete" type="button" onClick={() => void deleteImage(item.id)} title="删除图片"><Trash2 size={16} /></button></article>)}</div><Pagination page={imagesPage} lastPage={imagesLastPage} onPage={(page) => void loadImages(page)} /></>}</section>}
+      {tab === 'geoRooms' && <section className="admin-panel"><div className="admin-panel-heading"><div><h2>图寻房间</h2><p>查看私人房和管理员公开多人房，必要时可立即终止。</p></div><button className="button-secondary" type="button" onClick={() => void loadGeoRooms()}>刷新</button></div>{geoRooms.length === 0 ? <div className="admin-empty"><Gamepad2 size={30} /><strong>暂无图寻房间</strong></div> : <div className="admin-table-wrap"><table className="admin-table"><thead><tr><th>名称 / 房间码</th><th>类型</th><th>房主</th><th>人数</th><th>状态</th><th>创建时间</th><th>操作</th></tr></thead><tbody>{geoRooms.map((room) => <tr key={room.id}><td><strong>{room.name ?? '私人对局'}</strong><small className="admin-team-note geo-admin-room-code">{room.code}</small></td><td>{room.mode === 'admin_public' ? '管理员公开房' : '私人房'}</td><td>{room.host?.florrId ?? '-'}</td><td>{room.playerCount} / {room.maxPlayers}</td><td><span className={`admin-status ${room.status === 'finished' ? 'is-banned' : ''}`}>{room.status === 'waiting' ? '等待中' : room.status === 'playing' ? '对局中' : room.status === 'reveal' ? '回合结算' : '已关闭'}</span></td><td>{formatDate(room.createdAt)}</td><td><div className="admin-actions">{room.status !== 'finished' && <button type="button" disabled={busyId === room.id} onClick={() => void closeGeoRoom(room)}><DoorClosed size={15} />关闭房间</button>}</div></td></tr>)}</tbody></table></div>}</section>}
     </main>
 
     {lightbox && <div className="modal-backdrop image-lightbox" onMouseDown={(event) => event.target === event.currentTarget && setLightbox(null)}><section role="dialog" aria-modal="true"><button className="icon-button" onClick={() => setLightbox(null)} title="关闭"><XCircle size={21} /></button><img src={imageUrl(lightbox.id)} alt={`${lightbox.user?.florrId} 的完整游戏截图`} /><p>用户 #{lightbox.user?.id} · {lightbox.user?.florrId}</p></section></div>}

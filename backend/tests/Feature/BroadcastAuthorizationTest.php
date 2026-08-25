@@ -2,6 +2,8 @@
 
 namespace Tests\Feature;
 
+use App\Models\GeoHuntMatch;
+use App\Models\GeoHuntMatchPlayer;
 use App\Models\Team;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -44,6 +46,33 @@ class BroadcastAuthorizationTest extends TestCase
 
         $this->assertNotNull($callback);
         $this->assertTrue($callback($user));
+        $this->assertFalse($callback($banned));
+    }
+
+    public function test_geo_hunt_match_channel_only_allows_participants(): void
+    {
+        [$first, $second, $outsider] = User::factory()->count(3)->create();
+        $match = GeoHuntMatch::query()->create();
+        GeoHuntMatchPlayer::query()->create(['match_id' => $match->id, 'user_id' => $first->id, 'seat' => 1, 'hp' => 6000, 'heartbeat_at' => now()]);
+        GeoHuntMatchPlayer::query()->create(['match_id' => $match->id, 'user_id' => $second->id, 'seat' => 2, 'hp' => 6000, 'heartbeat_at' => now()]);
+        $callback = Broadcast::connection()->getChannels()->get('geo-hunt.match.{matchId}');
+
+        $this->assertNotNull($callback);
+        $this->assertTrue($callback($first, $match->id));
+        $this->assertTrue($callback($second, $match->id));
+        $this->assertFalse($callback($outsider, $match->id));
+    }
+
+    public function test_geo_hunt_lobby_channel_requires_a_verified_unbanned_user(): void
+    {
+        $verified = User::factory()->create(['florr_verified_at' => now()]);
+        $unverified = User::factory()->create(['florr_verified_at' => null]);
+        $banned = User::factory()->create(['florr_verified_at' => now(), 'banned_at' => now(), 'ban_id' => 'geo-lobby-ban']);
+        $callback = Broadcast::connection()->getChannels()->get('geo-hunt.lobby');
+
+        $this->assertNotNull($callback);
+        $this->assertTrue($callback($verified));
+        $this->assertFalse($callback($unverified));
         $this->assertFalse($callback($banned));
     }
 }

@@ -356,7 +356,7 @@ export function DashboardPage({ user, onUserUpdated, onLogout }: DashboardPagePr
       <header className="topbar">
         <div className="topbar-inner">
           <div className="brand-lockup"><span>Movers Squad</span><small>伐木.io</small></div>
-          <nav className="main-nav" aria-label="主导航"><a className="active" href="#teams">招募</a><Link to="/public-room">公共</Link></nav>
+          <nav className="main-nav" aria-label="主导航"><a className="active" href="#teams">招募</a><Link to="/public-room">公共</Link><Link to="/geo-hunt">图寻</Link></nav>
           <div className="topbar-actions">
             <button className={`notification-button notification-${notificationState}`} type="button" onClick={enableNotifications} disabled={notificationState === 'unsupported'} title={notificationState === 'denied' ? '请在浏览器站点设置中允许通知' : '系统通知权限'}>
               {notificationState === 'granted' ? <Bell size={17} /> : <BellOff size={17} />}

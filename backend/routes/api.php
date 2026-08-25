@@ -5,6 +5,10 @@ use App\Http\Controllers\AdminTeamController;
 use App\Http\Controllers\AdminUserController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\FlorrBindingController;
+use App\Http\Controllers\GeoHuntController;
+use App\Http\Controllers\GeoHuntMatchController;
+use App\Http\Controllers\GeoHuntRoomController;
+use App\Http\Controllers\AdminGeoHuntRoomController;
 use App\Http\Controllers\PublicMessageController;
 use App\Http\Controllers\PublicVoiceController;
 use App\Http\Controllers\TeamController;
@@ -41,6 +45,22 @@ Route::middleware('auth:sanctum')->group(function (): void {
         Route::post('/teams/{teamId}/messages', [TeamMessageController::class, 'store'])->middleware('throttle:chat');
         Route::post('/teams/{teamId}/messages/read', [TeamMessageController::class, 'read'])->middleware('throttle:write');
         Route::post('/teams/{teamId}/voice-token', [TeamVoiceController::class, 'token'])->middleware('throttle:voice');
+
+        Route::prefix('geo-hunt')->middleware('florr_verified')->group(function (): void {
+            Route::get('/lobby', [GeoHuntController::class, 'lobby'])->middleware('throttle:read');
+            Route::post('/queue', [GeoHuntController::class, 'queue'])->middleware('throttle:geo-hunt-action');
+            Route::delete('/queue', [GeoHuntController::class, 'leaveQueue'])->middleware('throttle:geo-hunt-action');
+            Route::post('/rooms', [GeoHuntRoomController::class, 'store'])->middleware('throttle:geo-hunt-action');
+            Route::post('/rooms/join', [GeoHuntRoomController::class, 'join'])->middleware('throttle:geo-hunt-action');
+            Route::get('/rooms/{code}', [GeoHuntRoomController::class, 'show'])->middleware('throttle:read');
+            Route::post('/rooms/{code}/start', [GeoHuntRoomController::class, 'start'])->middleware('throttle:geo-hunt-action');
+            Route::delete('/rooms/{code}/members/me', [GeoHuntRoomController::class, 'leave'])->middleware('throttle:geo-hunt-action');
+            Route::get('/maps/{mapKey}', [GeoHuntController::class, 'map'])->middleware('throttle:read');
+            Route::get('/matches/{match}', [GeoHuntMatchController::class, 'show'])->middleware('throttle:read');
+            Route::post('/matches/{match}/heartbeat', [GeoHuntMatchController::class, 'heartbeat'])->middleware('throttle:geo-hunt-heartbeat');
+            Route::post('/matches/{match}/guess', [GeoHuntMatchController::class, 'guess'])->middleware('throttle:geo-hunt-action');
+            Route::post('/matches/{match}/forfeit', [GeoHuntMatchController::class, 'forfeit'])->middleware('throttle:geo-hunt-action');
+        });
     });
 
     Route::prefix('admin')->middleware('admin')->group(function (): void {
@@ -51,6 +71,7 @@ Route::middleware('auth:sanctum')->group(function (): void {
             Route::get('/florr-bindings/{application}/image', [AdminFlorrBindingController::class, 'image']);
             Route::get('/florr-images', [AdminFlorrBindingController::class, 'images']);
             Route::get('/teams', [AdminTeamController::class, 'index']);
+            Route::get('/geo-hunt/rooms', [AdminGeoHuntRoomController::class, 'index']);
         });
         Route::middleware('throttle:admin-write')->group(function (): void {
             Route::post('/users/{user}/ban', [AdminUserController::class, 'ban']);
@@ -63,6 +84,7 @@ Route::middleware('auth:sanctum')->group(function (): void {
             Route::delete('/florr-images', [AdminFlorrBindingController::class, 'destroyImages']);
             Route::post('/teams/{team}/close', [AdminTeamController::class, 'close']);
             Route::delete('/teams/{team}', [AdminTeamController::class, 'destroy']);
+            Route::post('/geo-hunt/rooms/{match}/close', [AdminGeoHuntRoomController::class, 'close']);
         });
     });
 });

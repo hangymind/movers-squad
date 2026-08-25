@@ -1,0 +1,703 @@
+{
+  "columns": 0,
+  "grid": {
+    "height": 1,
+    "orientation": "orthogonal",
+    "width": 1
+  },
+  "margin": 0,
+  "name": "garden_ecology_difficulty",
+  "spacing": 0,
+  "tilecount": 36,
+  "tiledversion": "1.11.2",
+  "tileheight": 256,
+  "tiles": [
+    {
+      "id": 0,
+      "image": "tiles/garden_meadow_low_floor_0.svg",
+      "imageheight": 256,
+      "imagewidth": 256,
+      "properties": [
+        {
+          "name": "covers_everything",
+          "type": "bool",
+          "value": true
+        },
+        {
+          "name": "color",
+          "type": "color",
+          "value": "#27a966"
+        }
+      ],
+      "type": "tile"
+    },
+    {
+      "id": 1,
+      "image": "tiles/garden_meadow_low_floor_1.svg",
+      "imageheight": 256,
+      "imagewidth": 256,
+      "properties": [
+        {
+          "name": "covers_everything",
+          "type": "bool",
+          "value": true
+        },
+        {
+          "name": "color",
+          "type": "color",
+          "value": "#27a966"
+        }
+      ],
+      "type": "tile"
+    },
+    {
+      "id": 2,
+      "image": "tiles/garden_meadow_low_floor_2.svg",
+      "imageheight": 256,
+      "imagewidth": 256,
+      "properties": [
+        {
+          "name": "covers_everything",
+          "type": "bool",
+          "value": true
+        },
+        {
+          "name": "color",
+          "type": "color",
+          "value": "#27a966"
+        }
+      ],
+      "type": "tile"
+    },
+    {
+      "id": 3,
+      "image": "tiles/garden_meadow_low_floor_3.svg",
+      "imageheight": 256,
+      "imagewidth": 256,
+      "properties": [
+        {
+          "name": "covers_everything",
+          "type": "bool",
+          "value": true
+        },
+        {
+          "name": "color",
+          "type": "color",
+          "value": "#27a966"
+        }
+      ],
+      "type": "tile"
+    },
+    {
+      "id": 4,
+      "image": "tiles/garden_meadow_mid_floor_0.svg",
+      "imageheight": 256,
+      "imagewidth": 256,
+      "properties": [
+        {
+          "name": "covers_everything",
+          "type": "bool",
+          "value": true
+        },
+        {
+          "name": "color",
+          "type": "color",
+          "value": "#219d5e"
+        }
+      ],
+      "type": "tile"
+    },
+    {
+      "id": 5,
+      "image": "tiles/garden_meadow_mid_floor_1.svg",
+      "imageheight": 256,
+      "imagewidth": 256,
+      "properties": [
+        {
+          "name": "covers_everything",
+          "type": "bool",
+          "value": true
+        },
+        {
+          "name": "color",
+          "type": "color",
+          "value": "#219d5e"
+        }
+      ],
+      "type": "tile"
+    },
+    {
+      "id": 6,
+      "image": "tiles/garden_meadow_mid_floor_2.svg",
+      "imageheight": 256,
+      "imagewidth": 256,
+      "properties": [
+        {
+          "name": "covers_everything",
+          "type": "bool",
+          "value": true
+        },
+        {
+          "name": "color",
+          "type": "color",
+          "value": "#219d5e"
+        }
+      ],
+      "type": "tile"
+    },
+    {
+      "id": 7,
+      "image": "tiles/garden_meadow_mid_floor_3.svg",
+      "imageheight": 256,
+      "imagewidth": 256,
+      "properties": [
+        {
+          "name": "covers_everything",
+          "type": "bool",
+          "value": true
+        },
+        {
+          "name": "color",
+          "type": "color",
+          "value": "#219d5e"
+        }
+      ],
+      "type": "tile"
+    },
+    {
+      "id": 8,
+      "image": "tiles/garden_meadow_high_floor_0.svg",
+      "imageheight": 256,
+      "imagewidth": 256,
+      "properties": [
+        {
+          "name": "covers_everything",
+          "type": "bool",
+          "value": true
+        },
+        {
+          "name": "color",
+          "type": "color",
+          "value": "#1b8f55"
+        }
+      ],
+      "type": "tile"
+    },
+    {
+      "id": 9,
+      "image": "tiles/garden_meadow_high_floor_1.svg",
+      "imageheight": 256,
+      "imagewidth": 256,
+      "properties": [
+        {
+          "name": "covers_everything",
+          "type": "bool",
+          "value": true
+        },
+        {
+          "name": "color",
+          "type": "color",
+          "value": "#1b8f55"
+        }
+      ],
+      "type": "tile"
+    },
+    {
+      "id": 10,
+      "image": "tiles/garden_meadow_high_floor_2.svg",
+      "imageheight": 256,
+      "imagewidth": 256,
+      "properties": [
+        {
+          "name": "covers_everything",
+          "type": "bool",
+          "value": true
+        },
+        {
+          "name": "color",
+          "type": "color",
+          "value": "#1b8f55"
+        }
+      ],
+      "type": "tile"
+    },
+    {
+      "id": 11,
+      "image": "tiles/garden_meadow_high_floor_3.svg",
+      "imageheight": 256,
+      "imagewidth": 256,
+      "properties": [
+        {
+          "name": "covers_everything",
+          "type": "bool",
+          "value": true
+        },
+        {
+          "name": "color",
+          "type": "color",
+          "value": "#1b8f55"
+        }
+      ],
+      "type": "tile"
+    },
+    {
+      "id": 12,
+      "image": "tiles/garden_web_low_floor_0.svg",
+      "imageheight": 256,
+      "imagewidth": 256,
+      "properties": [
+        {
+          "name": "covers_everything",
+          "type": "bool",
+          "value": true
+        },
+        {
+          "name": "color",
+          "type": "color",
+          "value": "#249f6a"
+        }
+      ],
+      "type": "tile"
+    },
+    {
+      "id": 13,
+      "image": "tiles/garden_web_low_floor_1.svg",
+      "imageheight": 256,
+      "imagewidth": 256,
+      "properties": [
+        {
+          "name": "covers_everything",
+          "type": "bool",
+          "value": true
+        },
+        {
+          "name": "color",
+          "type": "color",
+          "value": "#249f6a"
+        }
+      ],
+      "type": "tile"
+    },
+    {
+      "id": 14,
+      "image": "tiles/garden_web_low_floor_2.svg",
+      "imageheight": 256,
+      "imagewidth": 256,
+      "properties": [
+        {
+          "name": "covers_everything",
+          "type": "bool",
+          "value": true
+        },
+        {
+          "name": "color",
+          "type": "color",
+          "value": "#249f6a"
+        }
+      ],
+      "type": "tile"
+    },
+    {
+      "id": 15,
+      "image": "tiles/garden_web_low_floor_3.svg",
+      "imageheight": 256,
+      "imagewidth": 256,
+      "properties": [
+        {
+          "name": "covers_everything",
+          "type": "bool",
+          "value": true
+        },
+        {
+          "name": "color",
+          "type": "color",
+          "value": "#249f6a"
+        }
+      ],
+      "type": "tile"
+    },
+    {
+      "id": 16,
+      "image": "tiles/garden_web_mid_floor_0.svg",
+      "imageheight": 256,
+      "imagewidth": 256,
+      "properties": [
+        {
+          "name": "covers_everything",
+          "type": "bool",
+          "value": true
+        },
+        {
+          "name": "color",
+          "type": "color",
+          "value": "#1f9262"
+        }
+      ],
+      "type": "tile"
+    },
+    {
+      "id": 17,
+      "image": "tiles/garden_web_mid_floor_1.svg",
+      "imageheight": 256,
+      "imagewidth": 256,
+      "properties": [
+        {
+          "name": "covers_everything",
+          "type": "bool",
+          "value": true
+        },
+        {
+          "name": "color",
+          "type": "color",
+          "value": "#1f9262"
+        }
+      ],
+      "type": "tile"
+    },
+    {
+      "id": 18,
+      "image": "tiles/garden_web_mid_floor_2.svg",
+      "imageheight": 256,
+      "imagewidth": 256,
+      "properties": [
+        {
+          "name": "covers_everything",
+          "type": "bool",
+          "value": true
+        },
+        {
+          "name": "color",
+          "type": "color",
+          "value": "#1f9262"
+        }
+      ],
+      "type": "tile"
+    },
+    {
+      "id": 19,
+      "image": "tiles/garden_web_mid_floor_3.svg",
+      "imageheight": 256,
+      "imagewidth": 256,
+      "properties": [
+        {
+          "name": "covers_everything",
+          "type": "bool",
+          "value": true
+        },
+        {
+          "name": "color",
+          "type": "color",
+          "value": "#1f9262"
+        }
+      ],
+      "type": "tile"
+    },
+    {
+      "id": 20,
+      "image": "tiles/garden_web_high_floor_0.svg",
+      "imageheight": 256,
+      "imagewidth": 256,
+      "properties": [
+        {
+          "name": "covers_everything",
+          "type": "bool",
+          "value": true
+        },
+        {
+          "name": "color",
+          "type": "color",
+          "value": "#197f56"
+        }
+      ],
+      "type": "tile"
+    },
+    {
+      "id": 21,
+      "image": "tiles/garden_web_high_floor_1.svg",
+      "imageheight": 256,
+      "imagewidth": 256,
+      "properties": [
+        {
+          "name": "covers_everything",
+          "type": "bool",
+          "value": true
+        },
+        {
+          "name": "color",
+          "type": "color",
+          "value": "#197f56"
+        }
+      ],
+      "type": "tile"
+    },
+    {
+      "id": 22,
+      "image": "tiles/garden_web_high_floor_2.svg",
+      "imageheight": 256,
+      "imagewidth": 256,
+      "properties": [
+        {
+          "name": "covers_everything",
+          "type": "bool",
+          "value": true
+        },
+        {
+          "name": "color",
+          "type": "color",
+          "value": "#197f56"
+        }
+      ],
+      "type": "tile"
+    },
+    {
+      "id": 23,
+      "image": "tiles/garden_web_high_floor_3.svg",
+      "imageheight": 256,
+      "imagewidth": 256,
+      "properties": [
+        {
+          "name": "covers_everything",
+          "type": "bool",
+          "value": true
+        },
+        {
+          "name": "color",
+          "type": "color",
+          "value": "#197f56"
+        }
+      ],
+      "type": "tile"
+    },
+    {
+      "id": 24,
+      "image": "tiles/garden_hive_low_floor_0.svg",
+      "imageheight": 256,
+      "imagewidth": 256,
+      "properties": [
+        {
+          "name": "covers_everything",
+          "type": "bool",
+          "value": true
+        },
+        {
+          "name": "color",
+          "type": "color",
+          "value": "#35a85c"
+        }
+      ],
+      "type": "tile"
+    },
+    {
+      "id": 25,
+      "image": "tiles/garden_hive_low_floor_1.svg",
+      "imageheight": 256,
+      "imagewidth": 256,
+      "properties": [
+        {
+          "name": "covers_everything",
+          "type": "bool",
+          "value": true
+        },
+        {
+          "name": "color",
+          "type": "color",
+          "value": "#35a85c"
+        }
+      ],
+      "type": "tile"
+    },
+    {
+      "id": 26,
+      "image": "tiles/garden_hive_low_floor_2.svg",
+      "imageheight": 256,
+      "imagewidth": 256,
+      "properties": [
+        {
+          "name": "covers_everything",
+          "type": "bool",
+          "value": true
+        },
+        {
+          "name": "color",
+          "type": "color",
+          "value": "#35a85c"
+        }
+      ],
+      "type": "tile"
+    },
+    {
+      "id": 27,
+      "image": "tiles/garden_hive_low_floor_3.svg",
+      "imageheight": 256,
+      "imagewidth": 256,
+      "properties": [
+        {
+          "name": "covers_everything",
+          "type": "bool",
+          "value": true
+        },
+        {
+          "name": "color",
+          "type": "color",
+          "value": "#35a85c"
+        }
+      ],
+      "type": "tile"
+    },
+    {
+      "id": 28,
+      "image": "tiles/garden_hive_mid_floor_0.svg",
+      "imageheight": 256,
+      "imagewidth": 256,
+      "properties": [
+        {
+          "name": "covers_everything",
+          "type": "bool",
+          "value": true
+        },
+        {
+          "name": "color",
+          "type": "color",
+          "value": "#2f9b54"
+        }
+      ],
+      "type": "tile"
+    },
+    {
+      "id": 29,
+      "image": "tiles/garden_hive_mid_floor_1.svg",
+      "imageheight": 256,
+      "imagewidth": 256,
+      "properties": [
+        {
+          "name": "covers_everything",
+          "type": "bool",
+          "value": true
+        },
+        {
+          "name": "color",
+          "type": "color",
+          "value": "#2f9b54"
+        }
+      ],
+      "type": "tile"
+    },
+    {
+      "id": 30,
+      "image": "tiles/garden_hive_mid_floor_2.svg",
+      "imageheight": 256,
+      "imagewidth": 256,
+      "properties": [
+        {
+          "name": "covers_everything",
+          "type": "bool",
+          "value": true
+        },
+        {
+          "name": "color",
+          "type": "color",
+          "value": "#2f9b54"
+        }
+      ],
+      "type": "tile"
+    },
+    {
+      "id": 31,
+      "image": "tiles/garden_hive_mid_floor_3.svg",
+      "imageheight": 256,
+      "imagewidth": 256,
+      "properties": [
+        {
+          "name": "covers_everything",
+          "type": "bool",
+          "value": true
+        },
+        {
+          "name": "color",
+          "type": "color",
+          "value": "#2f9b54"
+        }
+      ],
+      "type": "tile"
+    },
+    {
+      "id": 32,
+      "image": "tiles/garden_hive_high_floor_0.svg",
+      "imageheight": 256,
+      "imagewidth": 256,
+      "properties": [
+        {
+          "name": "covers_everything",
+          "type": "bool",
+          "value": true
+        },
+        {
+          "name": "color",
+          "type": "color",
+          "value": "#27894a"
+        }
+      ],
+      "type": "tile"
+    },
+    {
+      "id": 33,
+      "image": "tiles/garden_hive_high_floor_1.svg",
+      "imageheight": 256,
+      "imagewidth": 256,
+      "properties": [
+        {
+          "name": "covers_everything",
+          "type": "bool",
+          "value": true
+        },
+        {
+          "name": "color",
+          "type": "color",
+          "value": "#27894a"
+        }
+      ],
+      "type": "tile"
+    },
+    {
+      "id": 34,
+      "image": "tiles/garden_hive_high_floor_2.svg",
+      "imageheight": 256,
+      "imagewidth": 256,
+      "properties": [
+        {
+          "name": "covers_everything",
+          "type": "bool",
+          "value": true
+        },
+        {
+          "name": "color",
+          "type": "color",
+          "value": "#27894a"
+        }
+      ],
+      "type": "tile"
+    },
+    {
+      "id": 35,
+      "image": "tiles/garden_hive_high_floor_3.svg",
+      "imageheight": 256,
+      "imagewidth": 256,
+      "properties": [
+        {
+          "name": "covers_everything",
+          "type": "bool",
+          "value": true
+        },
+        {
+          "name": "color",
+          "type": "color",
+          "value": "#27894a"
+        }
+      ],
+      "type": "tile"
+    }
+  ],
+  "tilewidth": 256,
+  "type": "tileset",
+  "version": "1.11"
+}

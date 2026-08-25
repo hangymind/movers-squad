@@ -1,6 +1,7 @@
 import { defineConfig } from 'vitest/config'
 import react from '@vitejs/plugin-react'
 import { execFileSync } from 'node:child_process'
+import { viteStaticCopy } from 'vite-plugin-static-copy'
 
 function buildVersion() {
   const date = process.env.BUILD_DATE ?? new Intl.DateTimeFormat('en-CA', {
@@ -15,7 +16,14 @@ function buildVersion() {
 
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), viteStaticCopy({ targets: [{
+    src: '../map/tiles/**/*',
+    dest: 'geo-hunt-assets/tiles',
+    rename: { stripBase: 3 },
+    transform: (content, filename) => filename.endsWith('.svg') && !content.includes('xmlns=')
+      ? content.replace(/<svg(?=\s)/, '<svg xmlns="http://www.w3.org/2000/svg"')
+      : content,
+  }] })],
   define: { __BUILD_VERSION__: JSON.stringify(buildVersion()) },
   build: {
     sourcemap: false,

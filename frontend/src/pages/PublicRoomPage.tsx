@@ -203,7 +203,7 @@ export function PublicRoomPage({ user, onLogout }: PublicRoomPageProps) {
     {realtimeStatus === 'unavailable' && <div className="modal-backdrop realtime-overlay"><section className="modal" role="alertdialog" aria-modal="true"><h2>实时连接已断开</h2><p>公共聊天可能无法实时同步，正在通过轮询继续刷新。</p><button className="button-primary" type="button" onClick={() => window.location.reload()}>重试连接</button></section></div>}
     <header className="room-topbar">
       <div className="brand-lockup"><span>Movers Squad</span><small>公共房间</small></div>
-      <nav className="main-nav room-main-nav" aria-label="主导航"><Link to="/">招募</Link><Link className="active" to="/public-room">公共</Link></nav>
+      <nav className="main-nav room-main-nav" aria-label="主导航"><Link to="/">招募</Link><Link className="active" to="/public-room">公共</Link><Link to="/geo-hunt">图寻</Link></nav>
       <div className="room-topbar-actions"><button className="button-secondary public-back-button" type="button" onClick={() => navigate('/')}><ArrowLeft size={16} />返回大厅</button><span className="room-status"><i />公共频道</span><button className="button-secondary" type="button" onClick={() => void onLogout()}><LogOut size={16} />退出登录</button></div>
     </header>
 

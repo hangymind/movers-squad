@@ -93,4 +93,9 @@ class User extends Authenticatable
     {
         return $this->hasOne(FlorrBindingApplication::class)->latestOfMany();
     }
+
+    public function geoHuntProfile(): HasOne
+    {
+        return $this->hasOne(GeoHuntProfile::class);
+    }
 }

@@ -50,6 +50,11 @@ class AppServiceProvider extends ServiceProvider
             Limit::perMinute(12)->by('voice-user|'.$request->user()->id),
             Limit::perMinute(36)->by('voice-ip|'.$request->ip()),
         ]);
+        RateLimiter::for('geo-hunt-action', fn (Request $request) => [
+            Limit::perMinute(45)->by('geo-hunt-user|'.$request->user()->id),
+            Limit::perMinute(90)->by('geo-hunt-ip|'.$request->ip()),
+        ]);
+        RateLimiter::for('geo-hunt-heartbeat', fn (Request $request) => Limit::perMinute(12)->by('geo-hunt-heartbeat|'.$request->user()->id));
         RateLimiter::for('upload', fn (Request $request) => [
             Limit::perHour(3)->by('upload-user|'.$request->user()->id),
             Limit::perHour(10)->by('upload-ip|'.$request->ip()),

@@ -11,7 +11,141 @@ export interface User {
   florrBinding?: FlorrBindingSummary
   reverbKey?: string
   notificationSettings?: NotificationSettings
+  geoHuntProfile?: GeoHuntProfile
 }
+
+export interface GeoHuntProfile {
+  level: number
+  experience: number
+  experienceIntoLevel: number
+  experienceForNextLevel: number
+  wins: number
+  losses: number
+  matchesPlayed: number
+}
+
+export interface GeoHuntLobby {
+  profile: GeoHuntProfile
+  queued: boolean
+  queueCount: number
+  currentMatchId: number | null
+  currentRoomCode: string | null
+  publicRooms: GeoHuntRoomSummary[]
+}
+
+export type GeoHuntMode = 'ranked_1v1' | 'private' | 'admin_public'
+
+export interface GeoHuntRoomSummary {
+  id: number
+  code: string
+  name: string | null
+  mode: Exclude<GeoHuntMode, 'ranked_1v1'>
+  host: Pick<User, 'id' | 'florrId'> | null
+  playerCount: number
+  maxPlayers: number
+  status: 'waiting' | 'playing' | 'reveal' | 'finished'
+  createdAt: string
+}
+
+export interface GeoHuntRoomState extends GeoHuntRoomSummary {
+  stateVersion: number
+  hostId: number
+  players: Array<{ user: User; seat: number }>
+}
+
+export interface GeoHuntTile {
+  imageUrl: string
+  width: number
+  height: number
+}
+
+export interface GeoHuntTileLayer { name: string; data: number[] }
+export interface GeoHuntEncodedTileLayer { name: string; encoding: 'base64-gzip-u32le'; data: string }
+
+export interface GeoHuntMap {
+  key: string
+  width: number
+  height: number
+  tileWidth: number
+  tileHeight: number
+  backgroundColor: string
+  layers: GeoHuntTileLayer[]
+  tiles: Record<string, GeoHuntTile>
+}
+
+export interface GeoHuntMapPayload extends Omit<GeoHuntMap, 'layers'> {
+  layers: Array<GeoHuntTileLayer | GeoHuntEncodedTileLayer>
+}
+
+export interface GeoHuntSnippet {
+  width: number
+  height: number
+  layers: GeoHuntTileLayer[]
+}
+
+export interface GeoHuntGuessResult {
+  userId: number
+  x: number | null
+  y: number | null
+  distanceTiles: number | null
+  score: number
+  timedOut: boolean
+  damageTaken: number
+  hpAfter: number | null
+}
+
+export interface GeoHuntRoundResult {
+  target: { x: number; y: number }
+  damage: number
+  damagedUserId: number | null
+  guesses: GeoHuntGuessResult[]
+}
+
+export interface GeoHuntRound {
+  id: number
+  number: number
+  mapKey: string
+  multiplier: number
+  deadlineAt: string
+  firstGuessAt: string | null
+  revealUntil: string | null
+  submitted: boolean
+  submittedCount: number
+  requiredGuesses: number
+  snippet: GeoHuntSnippet
+  result: GeoHuntRoundResult | null
+}
+
+export interface GeoHuntMatchPlayer {
+  user: User
+  hp: number
+  connected: boolean
+  xpAwarded: number
+  seat: number
+  eliminated: boolean
+  placement: number | null
+}
+
+export interface GeoHuntMatchState {
+  id: number
+  status: 'playing' | 'reveal' | 'finished'
+  mode: GeoHuntMode
+  roomCode: string | null
+  roomName: string | null
+  maxPlayers: number
+  hostId: number | null
+  stateVersion: number
+  self: GeoHuntMatchPlayer
+  players: GeoHuntMatchPlayer[]
+  opponent?: GeoHuntMatchPlayer | null
+  round: GeoHuntRound | null
+  winnerId: number | null
+  endedReason: 'knockout' | 'forfeit' | 'disconnect' | 'admin_closed' | 'host_closed' | 'abandoned' | null
+  finishedAt: string | null
+  profile: GeoHuntProfile
+}
+
+export interface GeoHuntMatchFoundEvent { matchId: number }
 
 export interface NotificationSettings {
   showJoinNotifications: boolean

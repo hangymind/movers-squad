@@ -1,0 +1,19 @@
+<svg xml:space="preserve" viewBox="0 0 256 256">
+<path fill="#458967" d="M0 0h256v256H0Z"/>
+<path fill="#347856" stroke="#347856" stroke-linejoin="round" stroke-width="8" d="m100.27 218.894 8.398 4.735-4.735 8.398-8.398-4.735zM74.874 87.21l4.57 3.643-3.642 4.571-4.57-3.643Zm124.545 20.388 6.667 3.567-3.567 6.666-6.667-3.567zm-61.287-57.459 10.219-.988.987 10.22-10.219.987zm88.11-17.102 7.993-2.8 2.8 7.993-7.993 2.8zM21.334 216.044l8.774-3.995 3.995 8.774-8.774 3.995zm95.767-79.89 12.335-4.169 4.169 12.335-12.335 4.17zm68.06 76.257 11.48 1.316-1.316 11.482-11.481-1.317zM46.735 25.696l8.879-8.005 8.005 8.88-8.88 8.005z"/>
+<path fill="#347856" d="M256 256v-91c-18.7 24.2-27.9 61.2-39.2 91z"/>
+	<path fill="#347856" d="M29.8 29.2C33 18.9 36.7 9.2 41 0H0v92.6c14.3-19.1 23.5-39.3 29.8-63.4"/>
+	<path fill="#347856" d="M216.8 0C195.1 48.5 104.7.2 98.5 98.3S23.7 131 0 165v91h41c23.9-52.5 53.1-95.5 117.3-99.1s75.4-34.8 97.7-64.3V0z"/>
+	
+<path fill="#569a78" stroke="#569a78" stroke-linecap="square" stroke-linejoin="round" stroke-width="6" d="m83.157 129.709-12.535-8.176 13.347-6.768z"/>
+	<path fill="#569a78" stroke="#569a78" stroke-linecap="square" stroke-linejoin="round" stroke-width="6" d="m206.707 34.009-11.59 9.468-2.404-14.771z"/>
+	<path fill="#569a78" stroke="#569a78" stroke-linecap="square" stroke-linejoin="round" stroke-width="6" d="m200.342 183.341-6.974-13.24 14.954.58z"/>
+	<path fill="#569a78" stroke="#569a78" stroke-linecap="square" stroke-linejoin="round" stroke-width="4" d="m81.346 43.46 1.682-9.982 7.803 6.447z"/>
+	<path fill="#569a78" stroke="#569a78" stroke-linecap="square" stroke-linejoin="round" stroke-width="4" d="m42.785 173.221-9.514-3.456 7.75-6.512z"/>
+	<path fill="#569a78" stroke="#569a78" stroke-linecap="square" stroke-linejoin="round" stroke-width="4" d="m220.394 116.301 9.578 3.276-7.626 6.657z"/>
+	<path fill="#569a78" stroke="#569a78" stroke-linecap="square" stroke-linejoin="round" stroke-width="4" d="m139.591 213.662 9.84 2.372-6.973 7.336z"/>
+	<path fill="#569a78" stroke="#569a78" stroke-linecap="square" stroke-linejoin="round" stroke-width="2" d="m218.359 63.16 4.547-2.956.286 5.416z"/>
+	<path fill="#569a78" stroke="#569a78" stroke-linecap="square" stroke-linejoin="round" stroke-width="2" d="m135.697 117.807 3.502 4.14-5.337.963z"/>
+	<path fill="#569a78" stroke="#569a78" stroke-linecap="square" stroke-linejoin="round" stroke-width="2" d="m31.022 114.327.44-5.405 4.46 3.083z"/>
+	<path fill="#569a78" stroke="#569a78" stroke-linecap="square" stroke-linejoin="round" stroke-width="2" d="m90.788 237.548 2.443-4.842 2.972 4.536z"/>
+</svg>

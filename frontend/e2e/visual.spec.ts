@@ -81,6 +81,7 @@ test('admin approval and image resources remain usable on desktop and mobile', a
   const admin = { ...unverifiedUser, id: 1, florrId: 'Xyiw46_', isAdmin: true, isFlorrVerified: true, florrBinding: { ...unverifiedUser.florrBinding, status: 'approved' } }
   const application = { id: 12, status: 'pending', user: { id: 7, florrId: 'Long_Florr_Player_7788' }, screenshotMime: 'image/png', screenshotSize: 2345678, hasImage: true, rejectionReason: null, submittedAt: new Date().toISOString(), reviewedAt: null, resultUnread: false }
   for (const [name, viewport] of Object.entries({ desktop: { width: 1440, height: 900 }, mobile: { width: 390, height: 844 } })) {
+    let geoRoomClosed = false
     const context = await browser.newContext({ viewport })
     const page = await context.newPage()
     await page.route('**/api/**', (route) => {
@@ -89,6 +90,11 @@ test('admin approval and image resources remain usable on desktop and mobile', a
       if (path.endsWith('/image')) return route.fulfill({ status: 200, contentType: 'image/png', body: screenshot })
       if (path === '/api/admin/florr-bindings') return route.fulfill({ json: { data: [application], meta: { total: 1, current_page: 1, last_page: 1 } } })
       if (path === '/api/admin/florr-images') return route.fulfill({ json: { data: [{ ...application, status: 'approved', reviewedAt: new Date().toISOString() }], meta: { total: 1, current_page: 1, last_page: 1 } } })
+      if (path === '/api/admin/geo-hunt/rooms/81/close') { geoRoomClosed = true; return route.fulfill({ status: 204 }) }
+      if (path === '/api/admin/geo-hunt/rooms') return route.fulfill({ json: { data: [{
+        id: 81, code: 'ADM789', name: '管理员周末房', mode: 'admin_public', host: { id: admin.id, florrId: admin.florrId },
+        playerCount: 4, maxPlayers: 8, status: geoRoomClosed ? 'finished' : 'playing', createdAt: new Date().toISOString(),
+      }] } })
       return route.fulfill({ json: { data: [] } })
     })
     await page.goto('/admin')
@@ -101,6 +107,14 @@ test('admin approval and image resources remain usable on desktop and mobile', a
     await expect(page.getByText('全选当前页')).toBeVisible()
     await assertNoHorizontalOverflow(page)
     await page.screenshot({ path: `test-results/admin-images-${name}.png`, fullPage: true })
+
+    await page.getByRole('button', { name: '图寻房间' }).click()
+    await expect(page.getByText('管理员周末房')).toBeVisible()
+    await expect(page.getByText('ADM789')).toBeVisible()
+    await page.getByRole('button', { name: '关闭房间' }).click()
+    await expect(page.getByText('已关闭')).toBeVisible()
+    await assertNoHorizontalOverflow(page)
+    await page.screenshot({ path: `test-results/admin-geo-hunt-rooms-${name}.png`, fullPage: true })
     await context.close()
   }
 })
