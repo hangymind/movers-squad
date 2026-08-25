@@ -19,7 +19,14 @@ const map = {
 const snippet = { width: 3, height: 3, layers: [{ name: 'grass', data: [1, 6, 6, 6, 1, 6, 6, 6, 1] }] }
 
 test('geo hunt lobby and duel render on desktop and mobile', async ({ browser }) => {
-  for (const [name, viewport] of Object.entries({ desktop: { width: 1440, height: 900 }, mobile: { width: 390, height: 844 } })) {
+  test.setTimeout(120_000)
+  for (const [name, viewport] of Object.entries({
+    desktop: { width: 1440, height: 900 },
+    mobile320: { width: 320, height: 700 },
+    mobile375: { width: 375, height: 812 },
+    mobile414: { width: 414, height: 896 },
+    tablet768: { width: 768, height: 1024 },
+  })) {
     let matchStatus: 'playing' | 'finished' = 'playing'
     let roomStatus: 'waiting' | 'finished' = 'waiting'
     const context = await browser.newContext({ viewport })
@@ -61,9 +68,14 @@ test('geo hunt lobby and duel render on desktop and mobile', async ({ browser })
 
     await page.goto('/geo-hunt/rooms/ABC234')
     await expect(page.getByRole('heading', { name: '私人对局' })).toBeVisible()
-    await expect(page.getByText('ABC234')).toBeVisible()
+    await expect(page.getByLabel('房间码已隐藏')).toHaveText('••••••')
+    await expect(page.getByText('ABC234', { exact: true })).toHaveCount(0)
+    await page.getByRole('button', { name: '显示房间码' }).click()
+    await expect(page.getByLabel('房间码 ABC234')).toHaveText('ABC234')
+    await page.getByRole('button', { name: '隐藏房间码' }).click()
+    await expect(page.getByLabel('房间码已隐藏')).toBeVisible()
     await expect(page.getByRole('button', { name: '开始对局' })).toBeEnabled()
-    await expect(page).toHaveTitle(/私人对局 ABC234/)
+    await expect(page).toHaveTitle('私人对局 | 图寻 | Movers Squad')
     await page.screenshot({ path: `test-results/geo-hunt-room-${name}.png`, fullPage: true })
 
     roomStatus = 'finished'
@@ -73,9 +85,18 @@ test('geo hunt lobby and duel render on desktop and mobile', async ({ browser })
 
     await page.goto('/geo-hunt/matches/51')
     await expect(page.getByRole('heading', { name: '这是哪里？' })).toBeVisible()
-    if (name === 'mobile') await page.getByRole('tab', { name: '全图' }).click()
-    const canvas = page.getByRole('img', { name: '可选择落点的完整地图' })
+    await page.getByRole('button', { name: '开始定位' }).click()
+    const canvas = page.getByRole('img', { name: '可拖动、缩放并选择落点的完整地图' })
     await expect(canvas).toBeVisible()
+    const stageRatio = await canvas.evaluate((element) => {
+      const rect = element.getBoundingClientRect()
+      return (rect.width * rect.height) / (window.innerWidth * window.innerHeight)
+    })
+    expect(stageRatio).toBeGreaterThan(.7)
+    const scrollBeforeWheel = await page.evaluate(() => window.scrollY)
+    await canvas.hover()
+    await page.mouse.wheel(0, 480)
+    await expect(page.evaluate(() => window.scrollY)).resolves.toBe(scrollBeforeWheel)
     await page.screenshot({ path: `test-results/geo-hunt-match-${name}.png`, fullPage: true })
     await expect.poll(async () => canvas.evaluate((element: HTMLCanvasElement) => {
       const context2d = element.getContext('2d')
@@ -106,7 +127,7 @@ test('geo hunt lobby and duel render on desktop and mobile', async ({ browser })
 })
 
 test('four-player public room renders round results and final ranking', async ({ browser }) => {
-  test.setTimeout(60_000)
+  test.setTimeout(90_000)
   const admin = { ...user, isAdmin: true, florrId: 'Room_Admin' }
   const users = [admin, opponent, { ...user, id: 9, florrId: 'Map_Player_09' }, { ...user, id: 10, florrId: 'Map_Player_10' }]
   const hp = [4200, 3100, 900, 0]
@@ -124,11 +145,11 @@ test('four-player public room renders round results and final ranking', async ({
         const reveal = phase !== 'playing'
         const players = users.map((currentUser, index) => ({
           user: currentUser,
-          hp: finished ? [2800, 0, 0, 0][index] : hp[index],
+          hp: finished ? [2800, 0, 0, 0][index] : reveal ? [4200, 3100, 0, 0][index] : hp[index],
           connected: true,
           xpAwarded: 0,
           seat: index + 1,
-          eliminated: finished ? index > 0 : index === 3,
+          eliminated: finished ? index > 0 : reveal ? index >= 2 : index === 3,
           placement: finished ? index + 1 : placements[index],
         }))
         return route.fulfill({ json: { data: {
@@ -156,19 +177,29 @@ test('four-player public room renders round results and final ranking', async ({
     })
 
     await page.goto('/geo-hunt/matches/71')
-    await expect(page.getByRole('heading', { name: '周末八方图战' })).toBeVisible()
+    await expect(page.getByRole('main').getByText('周末八方图战', { exact: true })).toBeVisible()
     await expect(page).toHaveTitle('周末八方图战 | 图寻 | Movers Squad')
+    await page.getByRole('button', { name: '开始定位' }).click()
+    await page.getByRole('button', { name: '查看玩家状态' }).click()
     await expect(page.getByText('Map_Player_10')).toBeVisible()
     await expect(page.getByText('已淘汰')).toBeVisible()
     await expect(page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).resolves.toBe(true)
     await page.screenshot({ path: `test-results/geo-hunt-multiplayer-${name}.png`, fullPage: true })
+    await page.getByRole('button', { name: '关闭玩家窗口' }).click()
 
     phase = 'reveal'
-    await page.reload()
+    if (name === 'desktop') {
+      await expect(page.getByRole('heading', { name: 'Map_Player_09 已淘汰' })).toBeVisible({ timeout: 12_000 })
+      await expect(page.getByText('-3100 HP', { exact: true })).toBeVisible()
+      await expect(page.getByText('你的落点距离正确位置更远，因此受到本回合伤害。')).toBeVisible()
+      await page.getByRole('button', { name: '查看结果' }).click()
+    } else {
+      await page.reload()
+    }
     await expect(page.getByText('5,000 分')).toBeVisible()
     await expect(page.getByText('1,800 分')).toBeVisible()
     await expect(page.getByText(/-3100 HP/)).toBeVisible()
-    const resultCanvas = page.getByRole('img', { name: '需要在全图中定位的目标地图切片' })
+    const resultCanvas = page.getByRole('img', { name: '可拖动、缩放并选择落点的完整地图' })
     await expect.poll(async () => resultCanvas.evaluate((element: HTMLCanvasElement) => {
       const context2d = element.getContext('2d')
       if (!context2d || element.width < 2 || element.height < 2) return 0

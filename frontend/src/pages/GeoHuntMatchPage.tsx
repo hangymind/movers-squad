@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import { ArrowLeft, Check, Clock3, LogOut, RotateCcw, Swords, WifiOff } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { ArrowLeft, Check, Clock3, Eye, LogOut, MapPinned, RotateCcw, Skull, Swords, Target, UsersRound, WifiOff, X } from 'lucide-react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { Avatar } from '../components/Avatar'
 import { GeoHuntMapCanvas } from '../components/GeoHuntMapCanvas'
@@ -10,7 +10,6 @@ import type { GeoHuntMap, GeoHuntMapPayload, GeoHuntMatchState, User } from '../
 import './GeoHunt.css'
 
 interface Props { user: User; onLogout: () => Promise<void> }
-type MobileView = 'snippet' | 'map'
 const mapCache = new Map<string, Promise<GeoHuntMap>>()
 
 function loadMap(key: string): Promise<GeoHuntMap> {
@@ -32,7 +31,12 @@ export function GeoHuntMatchPage({ user, onLogout }: Props) {
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const [now, setNow] = useState(() => Date.now())
-  const [mobileView, setMobileView] = useState<MobileView>('snippet')
+  const [showSnippet, setShowSnippet] = useState(true)
+  const [showPlayers, setShowPlayers] = useState(false)
+  const [showResult, setShowResult] = useState(false)
+  const [eliminationNotice, setEliminationNotice] = useState<number | null>(null)
+  const previousEliminatedRef = useRef(new Set<number>())
+  const eliminationBaselineReadyRef = useRef(false)
   const [confirmExit, setConfirmExit] = useState(false)
   const [connectionStatus, setConnectionStatus] = useState<EchoConnectionStatus>('reconnecting')
   const [echo] = useState(() => createEcho(user.reverbKey ?? 'movers-local-key'))
@@ -67,9 +71,23 @@ export function GeoHuntMatchPage({ user, onLogout }: Props) {
     let active = true
     loadMap(key).then((loadedMap) => { if (active) setMap(loadedMap) }).catch((requestError) => setError(getErrorMessage(requestError)))
     setMarker(null)
-    setMobileView('snippet')
+    setShowSnippet(true)
+    setShowResult(false)
     return () => { active = false }
   }, [state?.round?.id, state?.round?.mapKey])
+  useEffect(() => {
+    if (!state) return
+    const eliminated = new Set(state.players.filter((player) => player.eliminated).map((player) => player.user.id))
+    const newlyEliminated = [...eliminated].find((id) => !previousEliminatedRef.current.has(id))
+    if (eliminationBaselineReadyRef.current && newlyEliminated !== undefined) setEliminationNotice(newlyEliminated)
+    previousEliminatedRef.current = eliminated
+    eliminationBaselineReadyRef.current = true
+  }, [state?.stateVersion, state])
+  useEffect(() => {
+    if (state?.status !== 'reveal') return
+    const timeout = window.setTimeout(() => setShowResult(true), 1200)
+    return () => window.clearTimeout(timeout)
+  }, [state?.round?.id, state?.status])
   useEffect(() => {
     if (!state?.roomName) return
     const previous = document.title
@@ -120,6 +138,9 @@ export function GeoHuntMatchPage({ user, onLogout }: Props) {
   const ownResult = state.round?.result?.guesses.find((guess) => guess.userId === user.id)
   const rankedOpponent = state.players.find((player) => player.user.id !== user.id)
   const isCustom = state.mode !== 'ranked_1v1'
+  const eliminatedPlayer = state.players.find((player) => player.user.id === eliminationNotice)
+  const eliminatedGuess = state.round?.result?.guesses.find((guess) => guess.userId === eliminationNotice)
+  const aliveCount = state.players.filter((player) => !player.eliminated).length
 
   return <div className="geo-page geo-match-page">
     <header className="room-topbar geo-topbar">
@@ -129,25 +150,37 @@ export function GeoHuntMatchPage({ user, onLogout }: Props) {
     </header>
 
     <main className="geo-duel-shell">
-      {isCustom && <section className="geo-match-room-title"><div><span>{state.mode === 'admin_public' ? '管理员多人房' : '私人对局'}</span><h1>{state.roomName ?? `私人对局 · ${state.roomCode}`}</h1></div><strong>{state.players.filter((player) => !player.eliminated).length} 人存活</strong></section>}
-      {isCustom ? <><div className={`geo-timer geo-multi-timer${seconds <= 10 && state.status === 'playing' ? ' is-urgent' : ''}`} role="timer"><Clock3 size={18} /><strong>{state.status === 'playing' ? seconds : state.status === 'reveal' ? '结算' : '结束'}</strong></div><section className="geo-player-grid" aria-label="玩家生命值">{state.players.map((player) => <PlayerTile key={player.user.id} player={player} self={player.user.id === user.id} />)}</section></> : <section className="geo-scoreboard" aria-label="双方生命值"><PlayerBar player={state.self} side="self" /><div className={`geo-timer${seconds <= 10 && state.status === 'playing' ? ' is-urgent' : ''}`} role="timer"><Clock3 size={18} /><strong>{state.status === 'playing' ? seconds : state.status === 'reveal' ? '结算' : '结束'}</strong></div>{rankedOpponent && <PlayerBar player={rankedOpponent} side="opponent" />}</section>}
+      {map && state.round ? <section className={`geo-map-stage${isReveal ? ' is-reveal' : ''}`}>
+        <div className="geo-stage-map"><GeoHuntMapCanvas map={map} marker={!isReveal ? marker : null} resultMarkers={resultMarkers} interactive={!isReveal && !state.round.submitted && !state.self.eliminated} onMarkerChange={setMarker} ariaLabel="可拖动、缩放并选择落点的完整地图" /></div>
 
-      {state.players.some((player) => player.user.id !== user.id && !player.connected && !player.eliminated) && state.status !== 'finished' && <div className="geo-connection-warning" role="status"><WifiOff size={17} />有玩家连接中断，正在等待 30 秒重连。</div>}
-      {error && <div className="page-error" role="alert"><span>{error}</span><button type="button" onClick={() => void loadState()}>重试</button></div>}
+        <div className="geo-stage-hud">
+          <button className="geo-hud-button" type="button" onClick={() => setShowSnippet(true)} aria-label="查看目标区域"><Target size={18} /><span>目标</span></button>
+          <div className={`geo-timer${seconds <= 10 && state.status === 'playing' ? ' is-urgent' : ''}`} role="timer"><Clock3 size={18} /><strong>{state.status === 'playing' ? seconds : state.status === 'reveal' ? '结算' : '结束'}</strong></div>
+          <button className="geo-hud-button" type="button" onClick={() => setShowPlayers(true)} aria-label="查看玩家状态"><UsersRound size={18} /><span>{isCustom ? `${aliveCount} 存活` : '玩家'}</span></button>
+        </div>
 
-      {state.status === 'finished' ? <section className={`geo-settlement ${won ? 'is-win' : 'is-loss'}`}>
+        {!isCustom && <section className="geo-scoreboard geo-scoreboard-overlay" aria-label="双方生命值"><PlayerBar player={state.self} side="self" />{rankedOpponent && <PlayerBar player={rankedOpponent} side="opponent" />}</section>}
+        {isCustom && <div className="geo-room-overlay"><strong>{state.roomName ?? `房间 ${state.roomCode}`}</strong><span>第 {state.round.number} 回合 · {aliveCount} 人存活</span></div>}
+
+        {state.players.some((player) => player.user.id !== user.id && !player.connected && !player.eliminated) && state.status !== 'finished' && <div className="geo-connection-warning" role="status"><WifiOff size={17} />有玩家断线，等待重连</div>}
+        {error && <div className="page-error geo-stage-error" role="alert"><span>{error}</span><button type="button" onClick={() => void loadState()}>重试</button></div>}
+
+        {state.status !== 'finished' && !isReveal && <section className="geo-submit-bar"><div><strong>{state.self.eliminated ? '你已被淘汰，正在观战' : state.round.submitted ? '落点已锁定' : marker ? '落点已选择' : '点击地图选择位置'}</strong><span>{state.round.submitted ? `等待其他玩家（${state.round.submittedCount}/${state.round.requiredGuesses}）` : '可拖动地图，滚轮或双指缩放。'}</span></div><button className="button-primary" type="button" disabled={!marker || busy || state.round.submitted || state.self.eliminated} onClick={() => void submitGuess()}><Check size={18} />{state.round.submitted ? '已提交' : '确认落点'}</button></section>}
+        {isReveal && state.status !== 'finished' && <button className="geo-result-trigger" type="button" onClick={() => setShowResult(true)}><MapPinned size={17} />查看本回合详情</button>}
+
+        {showSnippet && state.status === 'playing' && <div className="geo-floating-backdrop" onPointerDown={(event) => { if (event.target === event.currentTarget) setShowSnippet(false) }}><section className="geo-floating-panel geo-target-window" role="dialog" aria-modal="true" aria-labelledby="geo-target-title"><header><div><span>目标区域</span><h2 id="geo-target-title">这是哪里？</h2></div><button type="button" onClick={() => setShowSnippet(false)} aria-label="关闭目标窗口"><X size={19} /></button></header><div className="geo-canvas-frame snippet"><GeoHuntMapCanvas map={map} snippet={state.round.snippet} ariaLabel="需要在全图中定位的目标地图切片" /></div><button className="button-primary" type="button" onClick={() => setShowSnippet(false)}><Eye size={17} />开始定位</button></section></div>}
+        {showPlayers && <div className="geo-floating-backdrop" onPointerDown={(event) => { if (event.target === event.currentTarget) setShowPlayers(false) }}><section className="geo-floating-panel geo-players-window" role="dialog" aria-modal="true" aria-labelledby="geo-players-title"><header><div><span>对局状态</span><h2 id="geo-players-title">玩家与生命值</h2></div><button type="button" onClick={() => setShowPlayers(false)} aria-label="关闭玩家窗口"><X size={19} /></button></header><div className="geo-player-grid" aria-label="玩家生命值">{state.players.map((player) => <PlayerTile key={player.user.id} player={player} self={player.user.id === user.id} />)}</div></section></div>}
+        {showResult && isReveal && state.round.result && state.status !== 'finished' && <div className="geo-floating-backdrop" onPointerDown={(event) => { if (event.target === event.currentTarget) setShowResult(false) }}><section className="geo-floating-panel geo-result-window" role="dialog" aria-modal="true" aria-labelledby="geo-result-title"><header><div><span>第 {state.round.number} 回合</span><h2 id="geo-result-title">落点与伤害结算</h2></div><button type="button" onClick={() => setShowResult(false)} aria-label="关闭结算窗口"><X size={19} /></button></header>{isCustom ? <section className="geo-multi-result" aria-live="polite">{[...state.round.result.guesses].sort((a, b) => b.score - a.score).map((guess) => { const player = state.players.find((item) => item.user.id === guess.userId); return <div key={guess.userId}><strong>{player?.user.florrId ?? '玩家'}</strong><b>{guess.score.toLocaleString()} 分</b><span>{guess.distanceTiles == null ? '未提交' : `${guess.distanceTiles.toFixed(1)} 格`} · -{guess.damageTaken} HP</span></div> })}</section> : <section className="geo-round-result" aria-live="polite"><ResultCell label="你" score={ownResult?.score ?? 0} distance={ownResult?.distanceTiles} /><div className="geo-damage"><strong>{state.round.result.damage}</strong><span>本回合伤害</span></div><ResultCell label="对手" score={state.round.result.guesses.find((guess) => guess.userId !== user.id)?.score ?? 0} distance={state.round.result.guesses.find((guess) => guess.userId !== user.id)?.distanceTiles} /></section>}</section></div>}
+
+        {state.status === 'finished' && <div className="geo-settlement-backdrop"><section className={`geo-settlement ${won ? 'is-win' : 'is-loss'}`}>
         <div className="geo-settlement-mark"><Swords size={38} /></div><span>{won ? 'VICTORY' : state.winnerId ? 'DEFEAT' : 'ROOM CLOSED'}</span><h1>{state.endedReason === 'admin_closed' ? '房间已由管理员关闭' : state.endedReason === 'host_closed' ? '房主已关闭房间' : won ? '对决胜利' : '本局落败'}</h1><p>{state.endedReason === 'knockout' ? '生命值归零' : state.endedReason === 'forfeit' ? '有玩家主动退出' : state.endedReason === 'disconnect' ? '有玩家断线超时' : '本局不会计入经验和战绩'}</p>
         {isCustom ? <div className="geo-final-ranking">{[...state.players].sort((a, b) => (a.placement ?? 99) - (b.placement ?? 99)).map((player) => <div key={player.user.id}><b>#{player.placement ?? '-'}</b><Avatar user={player.user} size="sm" /><strong>{player.user.florrId}</strong><span>{player.hp} HP</span></div>)}</div> : <div className="geo-settlement-stats"><div><span>回合</span><strong>{state.round?.number ?? 0}</strong></div><div><span>获得经验</span><strong>+{state.self.xpAwarded} XP</strong></div><div><span>当前等级</span><strong>Lv.{state.profile.level}</strong></div></div>}
         <div className="geo-settlement-actions">{!isCustom && <button className="button-primary" type="button" disabled={busy} onClick={() => void rematch()}><RotateCcw size={17} />再次匹配</button>}<Link className="button-secondary" to="/geo-hunt">返回图寻大厅</Link></div>
-      </section> : map && state.round ? <>
-        <div className="geo-mobile-tabs" role="tablist" aria-label="地图视图"><button className={mobileView === 'snippet' ? 'active' : ''} type="button" role="tab" onClick={() => setMobileView('snippet')}>目标</button><button className={mobileView === 'map' ? 'active' : ''} type="button" role="tab" onClick={() => setMobileView('map')}>全图</button></div>
-        <section className={`geo-board${isReveal ? ' is-reveal' : ''}`}>
-          <article className={`geo-snippet-panel${mobileView !== 'snippet' ? ' is-mobile-hidden' : ''}`}><header><div><span>目标区域</span><h2>{isReveal ? '位置已公布' : '这是哪里？'}</h2></div><small>仅显示图块层</small></header><div className="geo-canvas-frame snippet"><GeoHuntMapCanvas map={map} snippet={state.round.snippet} ariaLabel="需要在全图中定位的目标地图切片" /></div></article>
-          <article className={`geo-map-panel${mobileView !== 'map' ? ' is-mobile-hidden' : ''}`}><header><div><span>完整地图</span><h2>{isReveal ? '回合结果' : '选择目标位置'}</h2></div><small>{isReveal ? '绿色为正确位置' : '拖动、缩放并点击落点'}</small></header><div className="geo-canvas-frame full"><GeoHuntMapCanvas map={map} marker={!isReveal ? marker : null} resultMarkers={resultMarkers} interactive={!isReveal && !state.round.submitted} onMarkerChange={setMarker} ariaLabel="可选择落点的完整地图" /></div></article>
-        </section>
-        {isReveal && state.round.result ? isCustom ? <section className="geo-multi-result" aria-live="polite">{[...state.round.result.guesses].sort((a, b) => b.score - a.score).map((guess) => { const player = state.players.find((item) => item.user.id === guess.userId); return <div key={guess.userId}><strong>{player?.user.florrId ?? '玩家'}</strong><b>{guess.score.toLocaleString()} 分</b><span>{guess.distanceTiles == null ? '未提交' : `${guess.distanceTiles.toFixed(1)} 格`} · -{guess.damageTaken} HP</span></div> })}</section> : <section className="geo-round-result" aria-live="polite"><ResultCell label="你" score={ownResult?.score ?? 0} distance={ownResult?.distanceTiles} /><div className="geo-damage"><strong>{state.round.result.damage}</strong><span>本回合伤害</span></div><ResultCell label="对手" score={state.round.result.guesses.find((guess) => guess.userId !== user.id)?.score ?? 0} distance={state.round.result.guesses.find((guess) => guess.userId !== user.id)?.distanceTiles} /></section> : <section className="geo-submit-bar"><div><strong>{state.self.eliminated ? '你已被淘汰，正在观战' : state.round.submitted ? '已锁定落点' : marker ? '落点已选择' : '请在完整地图中选择位置'}</strong><span>{state.round.submitted ? `等待其他玩家（${state.round.submittedCount}/${state.round.requiredGuesses}）` : '确认后无法修改。'}</span></div><button className="button-primary" type="button" disabled={!marker || busy || state.round.submitted || state.self.eliminated} onClick={() => void submitGuess()}><Check size={18} />{state.round.submitted ? '已提交' : '确认落点'}</button></section>}
-      </> : <div className="room-loading">正在载入地图...</div>}
+        </section></div>}
+      </section> : state.status === 'finished' ? <section className="geo-map-stage geo-map-stage-empty"><div className="geo-settlement-backdrop"><section className={`geo-settlement ${won ? 'is-win' : 'is-loss'}`}><div className="geo-settlement-mark"><Swords size={38} /></div><span>{won ? 'VICTORY' : state.winnerId ? 'DEFEAT' : 'ROOM CLOSED'}</span><h1>{state.endedReason === 'admin_closed' ? '房间已由管理员关闭' : state.endedReason === 'host_closed' ? '房主已关闭房间' : won ? '对决胜利' : '本局落败'}</h1><p>{state.endedReason === 'forfeit' ? '有玩家主动退出' : state.endedReason === 'disconnect' ? '有玩家断线超时' : '本局没有可显示的地图结果'}</p><div className="geo-settlement-actions"><Link className="button-secondary" to="/geo-hunt">返回图寻大厅</Link></div></section></div></section> : <div className="room-loading">正在载入地图...</div>}
     </main>
+
+    {eliminatedPlayer && <div className="geo-elimination-backdrop" role="alertdialog" aria-modal="true" aria-labelledby="geo-elimination-title"><section className="geo-elimination-card"><div className="geo-elimination-icon"><Skull size={34} /></div><span>{eliminatedPlayer.user.id === user.id ? 'YOU WERE ELIMINATED' : 'PLAYER ELIMINATED'}</span><h2 id="geo-elimination-title">{eliminatedPlayer.user.id === user.id ? '你的生命值归零' : `${eliminatedPlayer.user.florrId} 已淘汰`}</h2><div className="geo-elimination-cause"><div><span>落点误差</span><strong>{eliminatedGuess?.distanceTiles == null ? '未提交' : `${eliminatedGuess.distanceTiles.toFixed(1)} 格`}</strong></div><div><span>本回合承伤</span><strong>-{eliminatedGuess?.damageTaken ?? state.round?.result?.damage ?? 0} HP</strong></div><div><span>剩余生命</span><strong>0 HP</strong></div></div><p>{eliminatedGuess?.timedOut ? '本回合未在时限内提交，按最低分结算。' : '你的落点距离正确位置更远，因此受到本回合伤害。'}</p><button className="button-primary" type="button" onClick={() => setEliminationNotice(null)}>{eliminatedPlayer.user.id === user.id && state.status !== 'finished' ? '继续观战' : '查看结果'}</button></section></div>}
 
     {confirmExit && <div className="modal-backdrop"><section className="modal geo-exit-modal" role="alertdialog" aria-modal="true" aria-labelledby="geo-exit-title"><h2 id="geo-exit-title">退出将立即判负</h2><p>主动退出不会获得失败经验，本局对手直接获胜。</p><div><button className="button-secondary" type="button" onClick={() => setConfirmExit(false)}>继续对局</button><button className="button-danger" type="button" disabled={busy} onClick={() => void forfeit()}>确认退出</button></div></section></div>}
   </div>

@@ -30,6 +30,8 @@ interface GeoHuntMapCanvasProps {
   onMarkerChange?: (point: { x: number; y: number }) => void
 }
 
+interface PointerPosition { x: number; y: number }
+
 export function GeoHuntMapCanvas({ map, snippet, marker, resultMarkers = [], interactive = false, ariaLabel, onMarkerChange }: GeoHuntMapCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [size, setSize] = useState({ width: 1, height: 1 })
@@ -38,7 +40,10 @@ export function GeoHuntMapCanvas({ map, snippet, marker, resultMarkers = [], int
   const [assetsRevision, setAssetsRevision] = useState(0)
   const loadedImagesRef = useRef(new Map<string, HTMLImageElement>())
   const dragRef = useRef<{ x: number; y: number; ox: number; oy: number; moved: boolean } | null>(null)
+  const pointersRef = useRef(new Map<number, PointerPosition>())
+  const pinchRef = useRef<{ distance: number; zoom: number; center: PointerPosition; offset: PointerPosition } | null>(null)
   const dragFrameRef = useRef<number | null>(null)
+  const cameraFrameRef = useRef<number | null>(null)
   const pendingOffsetRef = useRef<{ x: number; y: number } | null>(null)
   const source = snippet ?? map
   const layers = source.layers
@@ -84,7 +89,16 @@ export function GeoHuntMapCanvas({ map, snippet, marker, resultMarkers = [], int
 
   useEffect(() => () => {
     if (dragFrameRef.current !== null) window.cancelAnimationFrame(dragFrameRef.current)
+    if (cameraFrameRef.current !== null) window.cancelAnimationFrame(cameraFrameRef.current)
   }, [])
+
+  useEffect(() => {
+    const canvas = canvasRef.current
+    if (!canvas || !interactive) return
+    const stopPageScroll = (event: WheelEvent) => event.preventDefault()
+    canvas.addEventListener('wheel', stopPageScroll, { passive: false })
+    return () => canvas.removeEventListener('wheel', stopPageScroll)
+  }, [interactive])
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -107,6 +121,46 @@ export function GeoHuntMapCanvas({ map, snippet, marker, resultMarkers = [], int
       y: ((size.height - mapHeight * scale) / 2) + offset.y,
     }
   }, [mapHeight, mapWidth, offset, size, zoom])
+
+  useEffect(() => {
+    if (resultMarkers.length < 2 || size.width <= 1 || size.height <= 1) return
+    if (cameraFrameRef.current !== null) window.cancelAnimationFrame(cameraFrameRef.current)
+    const xs = resultMarkers.map((item) => item.x)
+    const ys = resultMarkers.map((item) => item.y)
+    const center = { x: (Math.min(...xs) + Math.max(...xs)) / 2, y: (Math.min(...ys) + Math.max(...ys)) / 2 }
+    const spanX = Math.max(.08, Math.max(...xs) - Math.min(...xs))
+    const spanY = Math.max(.08, Math.max(...ys) - Math.min(...ys))
+    const base = Math.min(size.width / mapWidth, size.height / mapHeight)
+    const targetZoom = Math.max(1, Math.min(6, Math.min(size.width * .68 / (spanX * mapWidth * base), size.height * .68 / (spanY * mapHeight * base))))
+    const scale = base * targetZoom
+    const targetOffset = {
+      x: size.width / 2 - center.x * mapWidth * scale - (size.width - mapWidth * scale) / 2,
+      y: size.height / 2 - center.y * mapHeight * scale - (size.height - mapHeight * scale) / 2,
+    }
+    const startZoom = zoom
+    const startOffset = offset
+    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    const startedAt = performance.now()
+    const duration = reduceMotion ? 1 : 900
+    const animate = (time: number) => {
+      const progress = Math.min(1, (time - startedAt) / duration)
+      const eased = 1 - Math.pow(1 - progress, 3)
+      setZoom(startZoom + (targetZoom - startZoom) * eased)
+      setOffset({
+        x: startOffset.x + (targetOffset.x - startOffset.x) * eased,
+        y: startOffset.y + (targetOffset.y - startOffset.y) * eased,
+      })
+      if (progress < 1) cameraFrameRef.current = window.requestAnimationFrame(animate)
+      else cameraFrameRef.current = null
+    }
+    cameraFrameRef.current = window.requestAnimationFrame(animate)
+    return () => {
+      if (cameraFrameRef.current !== null) window.cancelAnimationFrame(cameraFrameRef.current)
+      cameraFrameRef.current = null
+    }
+    // The marker set is the camera cue; current camera values are intentionally captured once.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mapHeight, mapWidth, resultMarkers, size.height, size.width])
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -187,12 +241,39 @@ export function GeoHuntMapCanvas({ map, snippet, marker, resultMarkers = [], int
     tabIndex={interactive ? 0 : -1}
     onPointerDown={(event) => {
       if (!interactive) return
+      event.preventDefault()
       event.currentTarget.setPointerCapture(event.pointerId)
+      pointersRef.current.set(event.pointerId, { x: event.clientX, y: event.clientY })
+      if (pointersRef.current.size === 2) {
+        const [first, second] = [...pointersRef.current.values()]
+        pinchRef.current = {
+          distance: Math.hypot(second.x - first.x, second.y - first.y),
+          zoom,
+          center: { x: (first.x + second.x) / 2, y: (first.y + second.y) / 2 },
+          offset,
+        }
+        dragRef.current = null
+        return
+      }
       dragRef.current = { x: event.clientX, y: event.clientY, ox: offset.x, oy: offset.y, moved: false }
     }}
     onPointerMove={(event) => {
+      if (!interactive || !pointersRef.current.has(event.pointerId)) return
+      event.preventDefault()
+      pointersRef.current.set(event.pointerId, { x: event.clientX, y: event.clientY })
+      if (pointersRef.current.size >= 2 && pinchRef.current) {
+        const [first, second] = [...pointersRef.current.values()]
+        const distance = Math.max(1, Math.hypot(second.x - first.x, second.y - first.y))
+        const center = { x: (first.x + second.x) / 2, y: (first.y + second.y) / 2 }
+        setZoom(Math.max(1, Math.min(8, pinchRef.current.zoom * distance / Math.max(1, pinchRef.current.distance))))
+        setOffset({
+          x: pinchRef.current.offset.x + center.x - pinchRef.current.center.x,
+          y: pinchRef.current.offset.y + center.y - pinchRef.current.center.y,
+        })
+        return
+      }
       const drag = dragRef.current
-      if (!interactive || !drag) return
+      if (!drag) return
       const dx = event.clientX - drag.x
       const dy = event.clientY - drag.y
       if (Math.abs(dx) + Math.abs(dy) > 5) drag.moved = true
@@ -206,12 +287,18 @@ export function GeoHuntMapCanvas({ map, snippet, marker, resultMarkers = [], int
     }}
     onPointerUp={(event) => {
       const drag = dragRef.current
+      pointersRef.current.delete(event.pointerId)
+      if (pointersRef.current.size < 2) pinchRef.current = null
       dragRef.current = null
       if (interactive && drag && !drag.moved) onMarkerChange?.(pointFromEvent(event.clientX, event.clientY))
     }}
+    onPointerCancel={(event) => {
+      pointersRef.current.delete(event.pointerId)
+      if (pointersRef.current.size < 2) pinchRef.current = null
+      dragRef.current = null
+    }}
     onWheel={(event) => {
       if (!interactive) return
-      event.preventDefault()
       setZoom((value) => Math.max(1, Math.min(8, value * (event.deltaY > 0 ? 0.88 : 1.14))))
     }}
     onKeyDown={(event) => {
