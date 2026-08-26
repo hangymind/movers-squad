@@ -41,15 +41,34 @@ export function GeoHuntMatchPage({ user, onLogout }: Props) {
   const [confirmExit, setConfirmExit] = useState(false)
   const [connectionStatus, setConnectionStatus] = useState<EchoConnectionStatus>('reconnecting')
   const [echo] = useState(() => createEcho(user.reverbKey ?? 'movers-local-key'))
+  const currentMatchIdRef = useRef(matchId)
+  const refreshInFlightRef = useRef<{ matchId: number; request: Promise<void> } | null>(null)
 
-  const loadState = useCallback(async () => {
-    try {
-      const { data } = await api.get<{ data: GeoHuntMatchState }>(`/geo-hunt/matches/${matchId}`)
-      setState(data.data)
-      setError('')
-    } catch (requestError) { setError(getErrorMessage(requestError)) }
+  const refreshState = useCallback((heartbeat = false): Promise<void> => {
+    if (refreshInFlightRef.current?.matchId === matchId) return refreshInFlightRef.current.request
+
+    const request = (heartbeat
+      ? api.post<{ data: GeoHuntMatchState }>(`/geo-hunt/matches/${matchId}/heartbeat`)
+      : api.get<{ data: GeoHuntMatchState }>(`/geo-hunt/matches/${matchId}`))
+      .then(({ data }) => {
+        if (currentMatchIdRef.current !== matchId) return
+        setState(data.data)
+        setError('')
+      })
+      .catch((requestError) => {
+        if (!heartbeat && currentMatchIdRef.current === matchId) setError(getErrorMessage(requestError))
+      })
+      .finally(() => {
+        if (refreshInFlightRef.current?.request === request) refreshInFlightRef.current = null
+      })
+
+    refreshInFlightRef.current = { matchId, request }
+    return request
   }, [matchId])
 
+  const loadState = useCallback(() => refreshState(false), [refreshState])
+
+  useEffect(() => { currentMatchIdRef.current = matchId }, [matchId])
   useEffect(() => { if (Number.isInteger(matchId) && matchId > 0) void loadState(); else navigate('/geo-hunt', { replace: true }) }, [loadState, matchId, navigate])
   useEffect(() => {
     const interval = window.setInterval(() => setNow(Date.now()), 250)
@@ -57,9 +76,9 @@ export function GeoHuntMatchPage({ user, onLogout }: Props) {
   }, [])
   useEffect(() => {
     const interval = window.setInterval(() => void loadState(), connectionStatus === 'connected' ? 60_000 : 3_000)
-    const heartbeat = window.setInterval(() => api.post(`/geo-hunt/matches/${matchId}/heartbeat`).then(({ data }) => setState(data.data)).catch(() => undefined), 10_000)
+    const heartbeat = window.setInterval(() => void refreshState(true), 10_000)
     return () => { window.clearInterval(interval); window.clearInterval(heartbeat) }
-  }, [connectionStatus, loadState, matchId])
+  }, [connectionStatus, loadState, refreshState])
   useEffect(() => {
     const stopObserving = observeEchoConnection(echo, setConnectionStatus)
     const channel = echo.private(`geo-hunt.match.${matchId}`)
