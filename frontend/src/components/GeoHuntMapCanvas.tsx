@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { GeoHuntMap, GeoHuntSnippet } from '../types'
-import { decodeTiledGid, tiledFlipTransform } from '../lib/geoHunt'
+import { decodeTiledGid, selectLowDetailLayers, tiledFlipTransform } from '../lib/geoHunt'
 const imageCache = new Map<string, Promise<HTMLImageElement>>()
 
 function loadImage(url: string): Promise<HTMLImageElement> {
@@ -26,13 +26,14 @@ interface GeoHuntMapCanvasProps {
   marker?: { x: number; y: number } | null
   resultMarkers?: Marker[]
   interactive?: boolean
+  lowDetail?: boolean
   ariaLabel: string
   onMarkerChange?: (point: { x: number; y: number }) => void
 }
 
 interface PointerPosition { x: number; y: number }
 
-export function GeoHuntMapCanvas({ map, snippet, marker, resultMarkers = [], interactive = false, ariaLabel, onMarkerChange }: GeoHuntMapCanvasProps) {
+export function GeoHuntMapCanvas({ map, snippet, marker, resultMarkers = [], interactive = false, lowDetail = false, ariaLabel, onMarkerChange }: GeoHuntMapCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [size, setSize] = useState({ width: 1, height: 1 })
   const [zoom, setZoom] = useState(1)
@@ -51,13 +52,14 @@ export function GeoHuntMapCanvas({ map, snippet, marker, resultMarkers = [], int
   const mapHeight = source.height
 
   const usedGids = useMemo(() => {
+    if (lowDetail) return []
     const gids = new Set<number>()
     for (const layer of layers) for (const raw of layer.data) {
       const gid = decodeTiledGid(raw).gid
       if (gid) gids.add(gid)
     }
     return [...gids]
-  }, [layers])
+  }, [layers, lowDetail])
 
   useEffect(() => {
     let cancelled = false
@@ -172,7 +174,7 @@ export function GeoHuntMapCanvas({ map, snippet, marker, resultMarkers = [], int
     if (!context) return
     context.setTransform(ratio, 0, 0, ratio, 0, 0)
     context.clearRect(0, 0, size.width, size.height)
-    context.fillStyle = map.backgroundColor || '#1EA761'
+    context.fillStyle = lowDetail ? '#08111f' : map.backgroundColor || '#1EA761'
     context.fillRect(0, 0, size.width, size.height)
     context.imageSmoothingEnabled = true
 
@@ -180,30 +182,45 @@ export function GeoHuntMapCanvas({ map, snippet, marker, resultMarkers = [], int
     const startY = Math.max(0, Math.floor(-transform.y / transform.scale) - 1)
     const endX = Math.min(mapWidth, Math.ceil((size.width - transform.x) / transform.scale) + 1)
     const endY = Math.min(mapHeight, Math.ceil((size.height - transform.y) / transform.scale) + 1)
-    for (const layer of layers) {
-      for (let y = startY; y < endY; y++) for (let x = startX; x < endX; x++) {
-        const raw = layer.data[y * mapWidth + x] >>> 0
-        const decoded = decodeTiledGid(raw)
-        const gid = decoded.gid
-        if (!gid) continue
-        const tile = map.tiles[String(gid)]
-        const image = tile ? loadedImagesRef.current.get(tile.imageUrl) : undefined
-        if (!image?.complete || image.naturalWidth === 0) continue
-        const px = transform.x + x * transform.scale
-        const py = transform.y + y * transform.scale
-        const flip = tiledFlipTransform(decoded.flipHorizontal, decoded.flipVertical, decoded.flipDiagonal)
-        context.save()
-        context.translate(px, py)
-        context.transform(
-          flip.a * transform.scale,
-          flip.b * transform.scale,
-          flip.c * transform.scale,
-          flip.d * transform.scale,
-          flip.e * transform.scale,
-          flip.f * transform.scale,
-        )
-        context.drawImage(image, 0, 0, 1, 1)
-        context.restore()
+    if (lowDetail) {
+      selectLowDetailLayers(layers).forEach((layer, layerIndex) => {
+        context.fillStyle = layerIndex % 2 === 0 ? '#8d9baa' : '#657486'
+        for (let y = startY; y < endY; y++) for (let x = startX; x < endX; x++) {
+          if (!decodeTiledGid(layer.data[y * mapWidth + x] >>> 0).gid) continue
+          context.fillRect(
+            transform.x + x * transform.scale,
+            transform.y + y * transform.scale,
+            Math.ceil(transform.scale + 0.25),
+            Math.ceil(transform.scale + 0.25),
+          )
+        }
+      })
+    } else {
+      for (const layer of layers) {
+        for (let y = startY; y < endY; y++) for (let x = startX; x < endX; x++) {
+          const raw = layer.data[y * mapWidth + x] >>> 0
+          const decoded = decodeTiledGid(raw)
+          const gid = decoded.gid
+          if (!gid) continue
+          const tile = map.tiles[String(gid)]
+          const image = tile ? loadedImagesRef.current.get(tile.imageUrl) : undefined
+          if (!image?.complete || image.naturalWidth === 0) continue
+          const px = transform.x + x * transform.scale
+          const py = transform.y + y * transform.scale
+          const flip = tiledFlipTransform(decoded.flipHorizontal, decoded.flipVertical, decoded.flipDiagonal)
+          context.save()
+          context.translate(px, py)
+          context.transform(
+            flip.a * transform.scale,
+            flip.b * transform.scale,
+            flip.c * transform.scale,
+            flip.d * transform.scale,
+            flip.e * transform.scale,
+            flip.f * transform.scale,
+          )
+          context.drawImage(image, 0, 0, 1, 1)
+          context.restore()
+        }
       }
     }
 
@@ -223,7 +240,7 @@ export function GeoHuntMapCanvas({ map, snippet, marker, resultMarkers = [], int
       context.fillStyle = '#12213f'
       context.fillText(item.label, x + 12, y + 4)
     }
-  }, [assetsRevision, layers, map.backgroundColor, map.tiles, mapHeight, mapWidth, marker, resultMarkers, size, transform])
+  }, [assetsRevision, layers, lowDetail, map.backgroundColor, map.tiles, mapHeight, mapWidth, marker, resultMarkers, size, transform])
 
   const pointFromEvent = (clientX: number, clientY: number) => {
     const rect = canvasRef.current!.getBoundingClientRect()
@@ -235,7 +252,7 @@ export function GeoHuntMapCanvas({ map, snippet, marker, resultMarkers = [], int
 
   return <canvas
     ref={canvasRef}
-    className={`geo-map-canvas${interactive ? ' is-interactive' : ''}`}
+    className={`geo-map-canvas${interactive ? ' is-interactive' : ''}${lowDetail ? ' is-low-detail' : ''}`}
     role="img"
     aria-label={ariaLabel}
     tabIndex={interactive ? 0 : -1}

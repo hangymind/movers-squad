@@ -15,6 +15,15 @@ export function decodeTiledGid(value: number) {
   }
 }
 
+const LOW_DETAIL_HIDDEN_LAYERS = /^(?:bg|background|grass|sand|pavement|water|dirt|grate_bg|shortcut)$/i
+const LOW_DETAIL_ALWAYS_HIDDEN_LAYERS = /^(?:bg|background|shortcut)$/i
+
+export function selectLowDetailLayers(layers: GeoHuntTileLayer[]) {
+  const structures = layers.filter((layer) => !LOW_DETAIL_HIDDEN_LAYERS.test(layer.name) && layer.data.some((gid) => decodeTiledGid(gid).gid > 0))
+  if (structures.length > 0) return structures
+  return layers.filter((layer) => !LOW_DETAIL_ALWAYS_HIDDEN_LAYERS.test(layer.name) && layer.data.some((gid) => decodeTiledGid(gid).gid > 0))
+}
+
 export function tiledFlipTransform(flipHorizontal: boolean, flipVertical: boolean, flipDiagonal: boolean) {
   const point = (sourceX: number, sourceY: number) => {
     let x = flipDiagonal ? sourceY : sourceX
