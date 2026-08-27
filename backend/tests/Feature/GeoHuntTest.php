@@ -35,6 +35,17 @@ class GeoHuntTest extends TestCase
         $this->actingAs($user)->withHeader('If-None-Match', $etag)->getJson('/api/geo-hunt/maps/garden')->assertNotModified();
     }
 
+    public function test_match_state_is_lightweight_and_round_snippet_loads_separately(): void
+    {
+        [$first, , $match] = $this->matchPlayers();
+        $round = GeoHuntRound::query()->where('match_id', $match->id)->firstOrFail();
+
+        $this->actingAs($first)->getJson("/api/geo-hunt/matches/{$match->id}")
+            ->assertOk()->assertJsonPath('data.round.snippet', null);
+        $this->actingAs($first)->getJson("/api/geo-hunt/matches/{$match->id}/rounds/{$round->id}/snippet")
+            ->assertOk()->assertJsonStructure(['data' => ['width', 'height', 'layers']]);
+    }
+
     public function test_two_players_are_atomically_matched_and_can_resume(): void
     {
         [$first, $second] = User::factory()->count(2)->create();
@@ -155,12 +166,16 @@ class GeoHuntTest extends TestCase
         $this->assertSame(1, GeoHuntProfile::query()->findOrFail($second->id)->wins);
     }
 
-    public function test_one_stale_player_loses_after_disconnect_grace(): void
+    public function test_heartbeat_is_lightweight_and_state_request_reconciles_disconnects(): void
     {
         [$first, $second, $match] = $this->matchPlayers();
-        GeoHuntMatchPlayer::query()->where('match_id', $match->id)->where('user_id', $first->id)->update(['heartbeat_at' => now()->subSeconds(31)]);
+        GeoHuntMatchPlayer::query()->where('match_id', $match->id)->where('user_id', $first->id)->update(['heartbeat_at' => now()->subSeconds(76)]);
 
         $this->actingAs($second)->postJson("/api/geo-hunt/matches/{$match->id}/heartbeat")
+            ->assertNoContent();
+        $this->assertDatabaseHas('geo_hunt_match_players', ['match_id' => $match->id, 'user_id' => $first->id, 'hp' => 6000]);
+
+        $this->actingAs($second)->getJson("/api/geo-hunt/matches/{$match->id}")
             ->assertOk()->assertJsonPath('data.winnerId', $second->id)->assertJsonPath('data.endedReason', 'disconnect');
     }
 

@@ -57,6 +57,7 @@ Route::middleware('auth:sanctum')->group(function (): void {
             Route::delete('/rooms/{code}/members/me', [GeoHuntRoomController::class, 'leave'])->middleware('throttle:geo-hunt-action');
             Route::get('/maps/{mapKey}', [GeoHuntController::class, 'map'])->middleware('throttle:read');
             Route::get('/matches/{match}', [GeoHuntMatchController::class, 'show'])->middleware('throttle:read');
+            Route::get('/matches/{match}/rounds/{round}/snippet', [GeoHuntMatchController::class, 'snippet'])->middleware('throttle:read');
             Route::post('/matches/{match}/heartbeat', [GeoHuntMatchController::class, 'heartbeat'])->middleware('throttle:geo-hunt-heartbeat');
             Route::post('/matches/{match}/guess', [GeoHuntMatchController::class, 'guess'])->middleware('throttle:geo-hunt-action');
             Route::post('/matches/{match}/forfeit', [GeoHuntMatchController::class, 'forfeit'])->middleware('throttle:geo-hunt-action');

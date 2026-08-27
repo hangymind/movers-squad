@@ -99,13 +99,10 @@ class GeoHuntGameService
         GeoHuntQueueEntry::query()->whereKey($user->id)->delete();
     }
 
-    public function heartbeat(User $user, int $matchId): array
+    public function heartbeat(User $user, int $matchId): void
     {
         $this->authorizePlayer($user->id, $matchId);
         GeoHuntMatchPlayer::query()->where('match_id', $matchId)->where('user_id', $user->id)->update(['heartbeat_at' => now()]);
-        $this->reconcile($matchId);
-
-        return $this->state($user, $matchId, false);
     }
 
     public function state(User $user, int $matchId, bool $shouldReconcile = true): array
@@ -133,7 +130,7 @@ class GeoHuntGameService
                 'submitted' => $round->guesses->contains('user_id', $user->id),
                 'submittedCount' => $round->guesses->count(),
                 'requiredGuesses' => $players->where('hp', '>', 0)->whereNull('eliminated_at')->count(),
-                'snippet' => $this->maps->cachedSnippet($round->map_key, $round->crop_x, $round->crop_y, $round->crop_size),
+                'snippet' => null,
                 'result' => $round->resolved_at ? [
                     'target' => ['x' => $round->target_x, 'y' => $round->target_y],
                     'damage' => $round->damage,
@@ -249,6 +246,14 @@ class GeoHuntGameService
     public function mapDocument(string $key): array
     {
         return $this->maps->clientDocument($key);
+    }
+
+    public function roundSnippet(User $user, int $matchId, int $roundId): array
+    {
+        $this->authorizePlayer($user->id, $matchId);
+        $round = GeoHuntRound::query()->whereKey($roundId)->where('match_id', $matchId)->firstOrFail();
+
+        return $this->maps->cachedSnippet($round->map_key, $round->crop_x, $round->crop_y, $round->crop_size);
     }
 
     public function beginCustomMatch(int $matchId, int $hostId): int

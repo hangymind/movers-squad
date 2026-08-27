@@ -7,5 +7,5 @@ return [
     'round_seconds' => 90,
     'guess_countdown_seconds' => 30,
     'reveal_seconds' => 8,
-    'presence_grace_seconds' => 30,
+    'presence_grace_seconds' => (int) env('GEO_HUNT_PRESENCE_GRACE_SECONDS', 75),
 ];

@@ -187,9 +187,11 @@ class GeoHuntRoomTest extends TestCase
         }
         $matchId = $this->actingAs($players[0])->postJson("/api/geo-hunt/rooms/{$code}/start")->json('data.matchId');
         GeoHuntMatchPlayer::query()->where('match_id', $matchId)->whereIn('user_id', [$players[2]->id, $players[3]->id])
-            ->update(['heartbeat_at' => now()->subSeconds(31)]);
+            ->update(['heartbeat_at' => now()->subSeconds(76)]);
 
         $this->actingAs($players[0])->postJson("/api/geo-hunt/matches/{$matchId}/heartbeat")
+            ->assertNoContent();
+        $this->actingAs($players[0])->getJson("/api/geo-hunt/matches/{$matchId}")
             ->assertOk()->assertJsonPath('data.status', 'playing');
         foreach ([$players[2], $players[3]] as $player) {
             $this->assertDatabaseHas('geo_hunt_match_players', ['match_id' => $matchId, 'user_id' => $player->id, 'hp' => 0, 'placement' => 3]);

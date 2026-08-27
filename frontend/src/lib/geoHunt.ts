@@ -56,11 +56,12 @@ export function secondsRemaining(deadline: string | undefined, now: number): num
   return Math.max(0, Math.ceil((new Date(deadline).getTime() - now) / 1000))
 }
 
-export async function decodeGeoHuntMap(payload: GeoHuntMapPayload): Promise<GeoHuntMap> {
+export async function decodeGeoHuntMap(payload: GeoHuntMapPayload, onProgress?: (progress: number) => void): Promise<GeoHuntMap> {
   const layers: GeoHuntTileLayer[] = []
-  for (const layer of payload.layers) {
+  for (const [index, layer] of payload.layers.entries()) {
     if (!('encoding' in layer)) {
       layers.push(layer)
+      onProgress?.((index + 1) / payload.layers.length)
       continue
     }
     const compressed = Uint8Array.from(atob(layer.data), (character) => character.charCodeAt(0))
@@ -75,6 +76,7 @@ export async function decodeGeoHuntMap(payload: GeoHuntMapPayload): Promise<GeoH
     const data = new Array<number>(buffer.byteLength / 4)
     for (let index = 0; index < data.length; index++) data[index] = view.getUint32(index * 4, true)
     layers.push({ name: layer.name, data })
+    onProgress?.((index + 1) / payload.layers.length)
   }
 
   return { ...payload, layers }

@@ -6,19 +6,33 @@ import { GeoHuntMapCanvas } from '../components/GeoHuntMapCanvas'
 import { api, getErrorMessage } from '../lib/api'
 import { createEcho, observeEchoConnection, type EchoConnectionStatus } from '../lib/echo'
 import { decodeGeoHuntMap, secondsRemaining } from '../lib/geoHunt'
-import type { GeoHuntMap, GeoHuntMapPayload, GeoHuntMatchState, User } from '../types'
+import type { GeoHuntMap, GeoHuntMapPayload, GeoHuntMatchState, GeoHuntSnippet, User } from '../types'
 import './GeoHunt.css'
 
 interface Props { user: User; onLogout: () => Promise<void> }
-const mapCache = new Map<string, Promise<GeoHuntMap>>()
+const mapCache = new Map<string, GeoHuntMap>()
+const mapRequests = new Map<string, Promise<GeoHuntMap>>()
 
-function loadMap(key: string): Promise<GeoHuntMap> {
+function loadMap(key: string, onProgress: (progress: number) => void): Promise<GeoHuntMap> {
   const cached = mapCache.get(key)
-  if (cached) return cached
-  const request = api.get<{ data: GeoHuntMapPayload }>(`/geo-hunt/maps/${key}`)
-    .then(({ data }) => decodeGeoHuntMap(data.data))
-  mapCache.set(key, request)
-  request.catch(() => mapCache.delete(key))
+  if (cached) { onProgress(100); return Promise.resolve(cached) }
+  const pending = mapRequests.get(key)
+  if (pending) { onProgress(65); return pending.then((map) => { onProgress(100); return map }) }
+
+  const request = api.get<{ data: GeoHuntMapPayload }>(`/geo-hunt/maps/${key}`, {
+    onDownloadProgress: (event) => {
+      if (event.total) onProgress(Math.min(60, Math.round((event.loaded / event.total) * 60)))
+      else onProgress(Math.min(55, 10 + Math.round(event.loaded / 16_384)))
+    },
+  }).then(async ({ data }) => {
+    onProgress(62)
+    const map = await decodeGeoHuntMap(data.data, (progress) => onProgress(62 + Math.round(progress * 35)))
+    mapCache.set(key, map)
+    onProgress(100)
+    return map
+  })
+  mapRequests.set(key, request)
+  request.then(() => mapRequests.delete(key), () => mapRequests.delete(key))
   return request
 }
 
@@ -27,6 +41,10 @@ export function GeoHuntMatchPage({ user, onLogout }: Props) {
   const matchId = Number(useParams().matchId)
   const [state, setState] = useState<GeoHuntMatchState | null>(null)
   const [map, setMap] = useState<GeoHuntMap | null>(null)
+  const [mapProgress, setMapProgress] = useState(0)
+  const [snippet, setSnippet] = useState<GeoHuntSnippet | null>(null)
+  const [snippetError, setSnippetError] = useState('')
+  const [snippetAttempt, setSnippetAttempt] = useState(0)
   const [marker, setMarker] = useState<{ x: number; y: number } | null>(null)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
@@ -42,21 +60,22 @@ export function GeoHuntMatchPage({ user, onLogout }: Props) {
   const [connectionStatus, setConnectionStatus] = useState<EchoConnectionStatus>('reconnecting')
   const [echo] = useState(() => createEcho(user.reverbKey ?? 'movers-local-key'))
   const currentMatchIdRef = useRef(matchId)
-  const refreshInFlightRef = useRef<{ matchId: number; request: Promise<void> } | null>(null)
+  const refreshInFlightRef = useRef<{ matchId: number; request: Promise<boolean> } | null>(null)
+  const heartbeatInFlightRef = useRef(false)
 
-  const refreshState = useCallback((heartbeat = false): Promise<void> => {
+  const refreshState = useCallback((): Promise<boolean> => {
     if (refreshInFlightRef.current?.matchId === matchId) return refreshInFlightRef.current.request
 
-    const request = (heartbeat
-      ? api.post<{ data: GeoHuntMatchState }>(`/geo-hunt/matches/${matchId}/heartbeat`)
-      : api.get<{ data: GeoHuntMatchState }>(`/geo-hunt/matches/${matchId}`))
+    const request = api.get<{ data: GeoHuntMatchState }>(`/geo-hunt/matches/${matchId}`)
       .then(({ data }) => {
-        if (currentMatchIdRef.current !== matchId) return
+        if (currentMatchIdRef.current !== matchId) return false
         setState(data.data)
         setError('')
+        return true
       })
       .catch((requestError) => {
-        if (!heartbeat && currentMatchIdRef.current === matchId) setError(getErrorMessage(requestError))
+        if (currentMatchIdRef.current === matchId) setError(getErrorMessage(requestError))
+        return false
       })
       .finally(() => {
         if (refreshInFlightRef.current?.request === request) refreshInFlightRef.current = null
@@ -66,19 +85,46 @@ export function GeoHuntMatchPage({ user, onLogout }: Props) {
     return request
   }, [matchId])
 
-  const loadState = useCallback(() => refreshState(false), [refreshState])
+  const loadState = useCallback(() => refreshState(), [refreshState])
 
   useEffect(() => { currentMatchIdRef.current = matchId }, [matchId])
-  useEffect(() => { if (Number.isInteger(matchId) && matchId > 0) void loadState(); else navigate('/geo-hunt', { replace: true }) }, [loadState, matchId, navigate])
+  useEffect(() => { if (!Number.isInteger(matchId) || matchId <= 0) navigate('/geo-hunt', { replace: true }) }, [matchId, navigate])
   useEffect(() => {
     const interval = window.setInterval(() => setNow(Date.now()), 250)
     return () => window.clearInterval(interval)
   }, [])
   useEffect(() => {
-    const interval = window.setInterval(() => void loadState(), connectionStatus === 'connected' ? 60_000 : 3_000)
-    const heartbeat = window.setInterval(() => void refreshState(true), 10_000)
-    return () => { window.clearInterval(interval); window.clearInterval(heartbeat) }
-  }, [connectionStatus, loadState, refreshState])
+    let cancelled = false
+    let failures = 0
+    let refreshTimer: number | null = null
+    const poll = async () => {
+      const ok = await loadState()
+      if (cancelled) return
+      failures = ok ? 0 : Math.min(failures + 1, 5)
+      if (!ok && failures >= 4) return
+      const normalDelay = connectionStatus === 'connected' ? 45_000 : 15_000
+      const retryDelay = Math.min(60_000, 5_000 * (2 ** Math.max(0, failures - 1)))
+      refreshTimer = window.setTimeout(poll, ok ? normalDelay : retryDelay)
+    }
+    void poll()
+    return () => { cancelled = true; if (refreshTimer !== null) window.clearTimeout(refreshTimer) }
+  }, [connectionStatus, loadState])
+  useEffect(() => {
+    if (!state || state.status === 'finished') return
+    let cancelled = false
+    let heartbeatTimer: number | null = null
+    let failures = 0
+    const heartbeat = async () => {
+      if (!heartbeatInFlightRef.current) {
+        heartbeatInFlightRef.current = true
+        try { await api.post(`/geo-hunt/matches/${matchId}/heartbeat`); failures = 0 } catch { failures = Math.min(failures + 1, 3) }
+        finally { heartbeatInFlightRef.current = false }
+      }
+      if (!cancelled) heartbeatTimer = window.setTimeout(heartbeat, Math.min(120_000, 25_000 * (2 ** failures)))
+    }
+    heartbeatTimer = window.setTimeout(heartbeat, 5_000)
+    return () => { cancelled = true; if (heartbeatTimer !== null) window.clearTimeout(heartbeatTimer) }
+  }, [matchId, state?.status])
   useEffect(() => {
     const stopObserving = observeEchoConnection(echo, setConnectionStatus)
     const channel = echo.private(`geo-hunt.match.${matchId}`)
@@ -89,12 +135,34 @@ export function GeoHuntMatchPage({ user, onLogout }: Props) {
     const key = state?.round?.mapKey
     if (!key) return
     let active = true
-    loadMap(key).then((loadedMap) => { if (active) setMap(loadedMap) }).catch((requestError) => setError(getErrorMessage(requestError)))
+    setMap(null)
+    setMapProgress(1)
+    loadMap(key, (progress) => { if (active) setMapProgress(progress) })
+      .then((loadedMap) => { if (active) { setMap(loadedMap); setMapProgress(100) } })
+      .catch((requestError) => { if (active) { setMapProgress(0); setError(getErrorMessage(requestError)) } })
     setMarker(null)
     setShowSnippet(true)
     setShowResult(false)
     return () => { active = false }
   }, [state?.round?.id, state?.round?.mapKey])
+  useEffect(() => {
+    const roundId = state?.round?.id
+    if (!roundId || state?.status !== 'playing') { setSnippet(null); setSnippetError(''); return }
+    let active = true
+    setSnippet(null)
+    setSnippetError('')
+    api.get<{ data: GeoHuntSnippet }>(`/geo-hunt/matches/${matchId}/rounds/${roundId}/snippet`)
+      .then(({ data }) => { if (active) setSnippet(data.data) })
+      .catch((requestError) => { if (active) setSnippetError(getErrorMessage(requestError)) })
+    return () => { active = false }
+  }, [matchId, snippetAttempt, state?.round?.id, state?.status])
+  useEffect(() => {
+    const transitionAt = state?.status === 'playing' ? state.round?.deadlineAt : state?.status === 'reveal' ? state.round?.revealUntil : null
+    if (!transitionAt) return
+    const delay = Math.max(250, new Date(transitionAt).getTime() - Date.now() + 350)
+    const timer = window.setTimeout(() => void loadState(), delay)
+    return () => window.clearTimeout(timer)
+  }, [loadState, state?.round?.deadlineAt, state?.round?.revealUntil, state?.status])
   useEffect(() => {
     if (!state) return
     const eliminated = new Set(state.players.filter((player) => player.eliminated).map((player) => player.user.id))
@@ -152,7 +220,7 @@ export function GeoHuntMatchPage({ user, onLogout }: Props) {
     } catch (requestError) { setError(getErrorMessage(requestError)); setBusy(false) }
   }
 
-  if (!state) return <div className="room-loading" role="status">正在恢复图寻对局...</div>
+  if (!state) return <div className="geo-recovery-screen" role="status"><div className="geo-loading-card"><strong>正在恢复图寻对局</strong><span>{error || '正在读取对局状态，请稍候…'}</span><div className="geo-loading-track is-indeterminate"><i /></div>{error && <button className="button-secondary" type="button" onClick={() => void loadState()}>立即重试</button>}</div></div>
   const isReveal = state.status === 'reveal' || state.status === 'finished'
   const won = state.winnerId === user.id
   const ownResult = state.round?.result?.guesses.find((guess) => guess.userId === user.id)
@@ -161,6 +229,8 @@ export function GeoHuntMatchPage({ user, onLogout }: Props) {
   const eliminatedPlayer = state.players.find((player) => player.user.id === eliminationNotice)
   const eliminatedGuess = state.round?.result?.guesses.find((guess) => guess.userId === eliminationNotice)
   const aliveCount = state.players.filter((player) => !player.eliminated).length
+  const resourcesReady = Boolean(map && (state.status !== 'playing' || snippet))
+  const preloadProgress = map ? (resourcesReady ? 100 : 96) : Math.round(mapProgress * .95)
 
   return <div className="geo-page geo-match-page">
     <header className="room-topbar geo-topbar">
@@ -170,7 +240,7 @@ export function GeoHuntMatchPage({ user, onLogout }: Props) {
     </header>
 
     <main className="geo-duel-shell">
-      {map && state.round ? <section className={`geo-map-stage${isReveal ? ' is-reveal' : ''}`}>
+      {resourcesReady && map && state.round ? <section className={`geo-map-stage${isReveal ? ' is-reveal' : ''}`}>
         <div className="geo-stage-map"><GeoHuntMapCanvas map={map} marker={!isReveal ? marker : null} resultMarkers={resultMarkers} interactive={!isReveal && !state.round.submitted && !state.self.eliminated} lowDetail={lowDetail} onMarkerChange={setMarker} ariaLabel={lowDetail ? '可拖动、缩放并选择落点的简化墙体地图' : '可拖动、缩放并选择落点的完整地图'} /></div>
 
         <div className="geo-stage-hud">
@@ -188,7 +258,7 @@ export function GeoHuntMatchPage({ user, onLogout }: Props) {
         {state.status !== 'finished' && !isReveal && <section className="geo-submit-bar"><div><strong>{state.self.eliminated ? '你已被淘汰，正在观战' : state.round.submitted ? '落点已锁定' : marker ? '落点已选择' : '点击地图选择位置'}</strong><span>{state.round.submitted ? `等待其他玩家（${state.round.submittedCount}/${state.round.requiredGuesses}）` : '可拖动地图，滚轮或双指缩放。'}</span></div><button className="button-primary" type="button" disabled={!marker || busy || state.round.submitted || state.self.eliminated} onClick={() => void submitGuess()}><Check size={18} />{state.round.submitted ? '已提交' : '确认落点'}</button></section>}
         {isReveal && state.status !== 'finished' && <button className="geo-result-trigger" type="button" onClick={() => setShowResult(true)}><MapPinned size={17} />查看本回合详情</button>}
 
-        {showSnippet && state.status === 'playing' && <div className="geo-floating-backdrop" onPointerDown={(event) => { if (event.target === event.currentTarget) setShowSnippet(false) }}><section className="geo-floating-panel geo-target-window" role="dialog" aria-modal="true" aria-labelledby="geo-target-title"><header><div><span>目标区域</span><h2 id="geo-target-title">这是哪里？</h2></div><button type="button" onClick={() => setShowSnippet(false)} aria-label="关闭目标窗口"><X size={19} /></button></header><div className="geo-canvas-frame snippet"><GeoHuntMapCanvas map={map} snippet={state.round.snippet} lowDetail={lowDetail} ariaLabel={lowDetail ? '需要在全图中定位的简化墙体切片' : '需要在全图中定位的目标地图切片'} /></div><button className="button-primary" type="button" onClick={() => setShowSnippet(false)}><Eye size={17} />开始定位</button></section></div>}
+        {showSnippet && snippet && state.status === 'playing' && <div className="geo-floating-backdrop" onPointerDown={(event) => { if (event.target === event.currentTarget) setShowSnippet(false) }}><section className="geo-floating-panel geo-target-window" role="dialog" aria-modal="true" aria-labelledby="geo-target-title"><header><div><span>目标区域</span><h2 id="geo-target-title">这是哪里？</h2></div><button type="button" onClick={() => setShowSnippet(false)} aria-label="关闭目标窗口"><X size={19} /></button></header><div className="geo-canvas-frame snippet"><GeoHuntMapCanvas map={map} snippet={snippet} lowDetail={lowDetail} ariaLabel={lowDetail ? '需要在全图中定位的简化墙体切片' : '需要在全图中定位的目标地图切片'} /></div><button className="button-primary" type="button" onClick={() => setShowSnippet(false)}><Eye size={17} />开始定位</button></section></div>}
         {showPlayers && <div className="geo-floating-backdrop" onPointerDown={(event) => { if (event.target === event.currentTarget) setShowPlayers(false) }}><section className="geo-floating-panel geo-players-window" role="dialog" aria-modal="true" aria-labelledby="geo-players-title"><header><div><span>对局状态</span><h2 id="geo-players-title">玩家与生命值</h2></div><button type="button" onClick={() => setShowPlayers(false)} aria-label="关闭玩家窗口"><X size={19} /></button></header><div className="geo-player-grid" aria-label="玩家生命值">{state.players.map((player) => <PlayerTile key={player.user.id} player={player} self={player.user.id === user.id} />)}</div></section></div>}
         {showResult && isReveal && state.round.result && state.status !== 'finished' && <div className="geo-floating-backdrop" onPointerDown={(event) => { if (event.target === event.currentTarget) setShowResult(false) }}><section className="geo-floating-panel geo-result-window" role="dialog" aria-modal="true" aria-labelledby="geo-result-title"><header><div><span>第 {state.round.number} 回合</span><h2 id="geo-result-title">落点与伤害结算</h2></div><button type="button" onClick={() => setShowResult(false)} aria-label="关闭结算窗口"><X size={19} /></button></header>{isCustom ? <section className="geo-multi-result" aria-live="polite">{[...state.round.result.guesses].sort((a, b) => b.score - a.score).map((guess) => { const player = state.players.find((item) => item.user.id === guess.userId); return <div key={guess.userId}><strong>{player?.user.florrId ?? '玩家'}</strong><b>{guess.score.toLocaleString()} 分</b><span>{guess.distanceTiles == null ? '未提交' : `${guess.distanceTiles.toFixed(1)} 格`} · -{guess.damageTaken} HP</span></div> })}</section> : <section className="geo-round-result" aria-live="polite"><ResultCell label="你" score={ownResult?.score ?? 0} distance={ownResult?.distanceTiles} /><div className="geo-damage"><strong>{state.round.result.damage}</strong><span>本回合伤害</span></div><ResultCell label="对手" score={state.round.result.guesses.find((guess) => guess.userId !== user.id)?.score ?? 0} distance={state.round.result.guesses.find((guess) => guess.userId !== user.id)?.distanceTiles} /></section>}</section></div>}
 
@@ -197,7 +267,7 @@ export function GeoHuntMatchPage({ user, onLogout }: Props) {
         {isCustom ? <div className="geo-final-ranking">{[...state.players].sort((a, b) => (a.placement ?? 99) - (b.placement ?? 99)).map((player) => <div key={player.user.id}><b>#{player.placement ?? '-'}</b><Avatar user={player.user} size="sm" /><strong>{player.user.florrId}</strong><span>{player.hp} HP</span></div>)}</div> : <div className="geo-settlement-stats"><div><span>回合</span><strong>{state.round?.number ?? 0}</strong></div><div><span>获得经验</span><strong>+{state.self.xpAwarded} XP</strong></div><div><span>当前等级</span><strong>Lv.{state.profile.level}</strong></div></div>}
         <div className="geo-settlement-actions">{!isCustom && <button className="button-primary" type="button" disabled={busy} onClick={() => void rematch()}><RotateCcw size={17} />再次匹配</button>}<Link className="button-secondary" to="/geo-hunt">返回图寻大厅</Link></div>
         </section></div>}
-      </section> : state.status === 'finished' ? <section className="geo-map-stage geo-map-stage-empty"><div className="geo-settlement-backdrop"><section className={`geo-settlement ${won ? 'is-win' : 'is-loss'}`}><div className="geo-settlement-mark"><Swords size={38} /></div><span>{won ? 'VICTORY' : state.winnerId ? 'DEFEAT' : 'ROOM CLOSED'}</span><h1>{state.endedReason === 'admin_closed' ? '房间已由管理员关闭' : state.endedReason === 'host_closed' ? '房主已关闭房间' : won ? '对决胜利' : '本局落败'}</h1><p>{state.endedReason === 'forfeit' ? '有玩家主动退出' : state.endedReason === 'disconnect' ? '有玩家断线超时' : '本局没有可显示的地图结果'}</p><div className="geo-settlement-actions"><Link className="button-secondary" to="/geo-hunt">返回图寻大厅</Link></div></section></div></section> : <div className="room-loading">正在载入地图...</div>}
+      </section> : state.status === 'finished' ? <section className="geo-map-stage geo-map-stage-empty"><div className="geo-settlement-backdrop"><section className={`geo-settlement ${won ? 'is-win' : 'is-loss'}`}><div className="geo-settlement-mark"><Swords size={38} /></div><span>{won ? 'VICTORY' : state.winnerId ? 'DEFEAT' : 'ROOM CLOSED'}</span><h1>{state.endedReason === 'admin_closed' ? '房间已由管理员关闭' : state.endedReason === 'host_closed' ? '房主已关闭房间' : won ? '对决胜利' : '本局落败'}</h1><p>{state.endedReason === 'forfeit' ? '有玩家主动退出' : state.endedReason === 'disconnect' ? '有玩家断线超时' : '本局没有可显示的地图结果'}</p><div className="geo-settlement-actions"><Link className="button-secondary" to="/geo-hunt">返回图寻大厅</Link></div></section></div></section> : <div className="geo-recovery-screen"><div className="geo-loading-card" role="status"><strong>正在预加载地图</strong><span>{snippetError || (mapProgress < 62 ? '下载地图数据' : !map ? '解压并准备图层' : '加载目标区域')}</span><div className="geo-loading-track"><i style={{ width: `${preloadProgress}%` }} /></div><b>{preloadProgress}%</b>{snippetError && <button className="button-secondary" type="button" onClick={() => setSnippetAttempt((value) => value + 1)}>重试目标区域</button>}</div></div>}
     </main>
 
     {eliminatedPlayer && <div className="geo-elimination-backdrop" role="alertdialog" aria-modal="true" aria-labelledby="geo-elimination-title"><section className="geo-elimination-card"><div className="geo-elimination-icon"><Skull size={34} /></div><span>{eliminatedPlayer.user.id === user.id ? 'YOU WERE ELIMINATED' : 'PLAYER ELIMINATED'}</span><h2 id="geo-elimination-title">{eliminatedPlayer.user.id === user.id ? '你的生命值归零' : `${eliminatedPlayer.user.florrId} 已淘汰`}</h2><div className="geo-elimination-cause"><div><span>落点误差</span><strong>{eliminatedGuess?.distanceTiles == null ? '未提交' : `${eliminatedGuess.distanceTiles.toFixed(1)} 格`}</strong></div><div><span>本回合承伤</span><strong>-{eliminatedGuess?.damageTaken ?? state.round?.result?.damage ?? 0} HP</strong></div><div><span>剩余生命</span><strong>0 HP</strong></div></div><p>{eliminatedGuess?.timedOut ? '本回合未在时限内提交，按最低分结算。' : '你的落点距离正确位置更远，因此受到本回合伤害。'}</p><button className="button-primary" type="button" onClick={() => setEliminationNotice(null)}>{eliminatedPlayer.user.id === user.id && state.status !== 'finished' ? '继续观战' : '查看结果'}</button></section></div>}

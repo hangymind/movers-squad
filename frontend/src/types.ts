@@ -112,7 +112,7 @@ export interface GeoHuntRound {
   submitted: boolean
   submittedCount: number
   requiredGuesses: number
-  snippet: GeoHuntSnippet
+  snippet: GeoHuntSnippet | null
   result: GeoHuntRoundResult | null
 }
 

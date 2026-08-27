@@ -17,7 +17,14 @@ class GeoHuntMatchController extends Controller
 
     public function heartbeat(Request $request, int $match): JsonResponse
     {
-        return response()->json(['data' => $this->game->heartbeat($request->user(), $match)]);
+        $this->game->heartbeat($request->user(), $match);
+
+        return response()->json(null, 204);
+    }
+
+    public function snippet(Request $request, int $match, int $round): JsonResponse
+    {
+        return response()->json(['data' => $this->game->roundSnippet($request->user(), $match, $round)]);
     }
 
     public function guess(Request $request, int $match): JsonResponse
